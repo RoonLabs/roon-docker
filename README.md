@@ -63,7 +63,7 @@ All Roon state lives under a single `/Roon` mount:
 - Your Roon data and settings are lost unless they can be restored from a Roon backup
 - The server will appear as a new machine and must be re-authorized from a Roon remote
 
-Always back up your /Roon volume. We recommend using Roon's built-in backup feature in Settings > Backups, with /Roon/backup as the backup destination
+Always back up your `/Roon` volume. We recommend using Roon's built-in backup feature in Settings > Backups, with `/Roon/backup` as the backup destination
 
 ## Updating
 
