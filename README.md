@@ -1,6 +1,6 @@
 # RoonServer Docker Image
 
-Official Docker image for [Roon Server](https://roon.app).
+Official Docker image for [RoonServer](https://roon.app).
 
 ```
 ghcr.io/roonlabs/roonserver
@@ -39,6 +39,7 @@ Set the `TZ` environment variable to your [timezone](https://en.wikipedia.org/wi
 | `TZ` | `UTC` | Timezone for logs and schedules |
 | `ROON_DATAROOT` | `/Roon/data` | Data directory (set in image, don't change) |
 | `ROON_ID_DIR` | `/Roon/data` | Identity directory (set in image, don't change) |
+| `ROON_CHANNEL` | `production` | Release channel: `production` or `earlyaccess` |
 | `ROON_DOWNLOAD_URL` | *(default CDN)* | Override the RoonServer download URL |
 
 ## Volumes
@@ -57,19 +58,31 @@ All Roon state lives under a single `/Roon` mount:
 -v /Music:/music:ro
 ```
 
-**The `/Roon/data` directory is critical.** It contains your Roon identity, database, library, playlists, DSP settings, streaming credentials, and zone configurations. If this volume is lost:
+**The `/Roon/data` directory is critical.** If this volume is lost:
 
-- Roon generates a new machine identity — you must re-authorize from a Roon remote
-- Your old machine may consume a license seat until deauthorized (via [account settings](https://accounts.roonlabs.com))
-- All library data, playlists, and settings are lost unless restored from a Roon backup
+- Your Roon data and settings are lost unless they can be restored from a Roon backup
+- The server will appear as a new machine and must be re-authorized from a Roon remote
 
-Always back up your `/Roon` volume. Use the Roon backup feature (Settings > Backups) pointed at `/Roon/backup`.
+Always back up your /Roon volume. We recommend using Roon's built-in backup feature in Settings > Backups, with /Roon/backup as the backup destination
 
 ## Updating
 
-Roon Server updates itself automatically. When an update is available, the container will download and apply it — no action needed.
+RoonServer updates itself automatically. When an update is available, the container will download and apply it — no action needed.
 
-Updates persist across `docker stop` / `docker start`. If you recreate the container (`docker rm` + `docker run`), Roon will re-download the latest version on first start.
+Updates persist across `docker stop` / `docker start`. If you recreate the container (`docker rm` + `docker run`), RoonServer will be re-downloaded from the configured release channel on first start.
+
+## Release Channel
+
+RoonServer has two release channels:
+
+| Channel | `ROON_CHANNEL` | Community |
+|---------|----------------|-----------|
+| **Production** | `production` (default) | [Roon](https://community.roonlabs.com/c/roon/8) |
+| **Early Access** | `earlyaccess` | [Early Access](https://community.roonlabs.com/c/early-access/120) |
+
+Set `ROON_CHANNEL` to change the channel. The channel determines which version of RoonServer is downloaded on first start, and Roon's self-updater continues on the same channel automatically.
+
+Changing channels on an existing install is safe — the container removes the old binaries and downloads from the new channel. Your data, settings, and identity are preserved.
 
 ## Troubleshooting
 

@@ -28,7 +28,7 @@ LABEL org.opencontainers.image.title="RoonServer"
 LABEL org.opencontainers.image.authors="Roon Labs"
 LABEL org.opencontainers.image.vendor="Roon Labs"
 LABEL org.opencontainers.image.version="${VERSION}"
-LABEL org.opencontainers.image.description="Official Roon Server Docker Image"
+LABEL org.opencontainers.image.description="Official RoonServer Docker Image"
 LABEL org.opencontainers.image.source="https://github.com/RoonLabs/roon-docker"
 LABEL org.opencontainers.image.revision="${GIT_SHA}"
 LABEL org.opencontainers.image.created="${BUILD_DATE}"
@@ -70,6 +70,6 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
 STOPSIGNAL SIGTERM
 
 # entrypoint.sh downloads RoonServer on first run (to /Roon/app), then
-# exec's into Server/RoonServer — the stock bash launcher that handles
+# exec's into start.sh — the stock bash launcher that handles
 # .NET runtime discovery, ulimit, self-update swap, and restart (exit 122).
 ENTRYPOINT ["/entrypoint.sh"]
