@@ -54,6 +54,18 @@
   /* Editor dots */
   .editor-dot { width: 12px; height: 12px; border-radius: 50%; }
 
+  /* Tooltip */
+  [data-tooltip] { position: relative; }
+  [data-tooltip]::after {
+    content: attr(data-tooltip);
+    position: absolute; bottom: 100%; left: 50%; transform: translateX(-50%);
+    padding: 4px 8px; margin-bottom: 6px;
+    background: #1a202b; color: #e2e8f0; border: 1px solid #374151;
+    border-radius: 6px; font-size: 12px; white-space: nowrap;
+    opacity: 0; pointer-events: none; transition: opacity 0.15s;
+  }
+  [data-tooltip]:hover::after { opacity: 1; }
+
   /* Reduced motion */
   @media (prefers-reduced-motion: reduce) {
     *, *::before, *::after {
@@ -103,7 +115,7 @@
 
         <!-- Platform Selector -->
         <section class="bg-surface-800/60 border border-surface-500/40 rounded-xl p-5 backdrop-blur-sm">
-          <h3 class="text-xs font-semibold uppercase tracking-wider text-surface-300 mb-3">Platform</h3>
+          <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-200 mb-3">Platform</h3>
           <label for="platform-select" class="sr-only">Select your platform</label>
           <select id="platform-select"
                   class="w-full px-3 py-2 bg-surface-700 border border-surface-500/50 rounded-lg text-sm text-slate-200 focus:border-roon-400 focus:ring-1 focus:ring-roon-400 transition-colors duration-200 outline-none appearance-none"
@@ -118,17 +130,18 @@
           <p class="text-xs text-surface-300 mt-3" id="platform-hint" aria-live="polite">Paths set to standard Linux conventions.</p>
         </section>
 
-        <!-- Image -->
+        <!-- Release Channel -->
         <section class="bg-surface-800/60 border border-surface-500/40 rounded-xl p-5 backdrop-blur-sm">
-          <h3 class="text-xs font-semibold uppercase tracking-wider text-surface-300 mb-3">Image</h3>
+          <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-200 mb-3">Roon Server Release Channel</h3>
           <div>
-            <label class="block text-xs text-surface-300 mb-1.5" for="image">Container image tag</label>
-            <select id="image"
-                    class="w-full px-3 py-2 bg-surface-700 border border-surface-500/50 rounded-lg text-sm font-mono text-slate-200 focus:border-roon-400 focus:ring-1 focus:ring-roon-400 transition-colors duration-200 outline-none appearance-none"
+            <label class="block text-xs text-surface-300 mb-1.5" for="channel-select">Which release channel to install on first start</label>
+            <select id="channel-select"
+                    class="w-full px-3 py-2 bg-surface-700 border border-surface-500/50 rounded-lg text-sm text-slate-200 focus:border-roon-400 focus:ring-1 focus:ring-roon-400 transition-colors duration-200 outline-none appearance-none"
                     style="background-image:url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M3%204.5l3%203%203-3%22%2F%3E%3C%2Fsvg%3E');background-repeat:no-repeat;background-position:right 12px center;padding-right:36px">
-              <option value="ghcr.io/roonlabs/roonserver:latest" selected>latest</option>
+              <option value="production" selected>Production</option>
+              <option value="earlyaccess">Early Access</option>
             </select>
-            <p class="text-xs text-surface-300 mt-1.5" id="image-hint"></p>
+            <p class="text-xs text-surface-300 mt-1.5" id="channel-hint"></p>
           </div>
         </section>
 
@@ -136,10 +149,10 @@
         <section class="bg-surface-800/60 border border-surface-500/40 rounded-xl p-5 backdrop-blur-sm">
           <div class="flex items-center justify-between mb-4">
             <div class="flex items-center gap-2">
-              <h3 class="text-xs font-semibold uppercase tracking-wider text-surface-300">Volumes</h3>
+              <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-200">Volumes</h3>
               <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-red-500/15 text-red-400 ring-1 ring-red-500/20">Required</span>
             </div>
-            <button type="button" id="btn-add-volume" aria-label="Add volume mount"
+            <button type="button" id="btn-add-volume" data-tooltip="Add volume mount" aria-label="Add volume mount"
                     class="inline-flex items-center justify-center w-7 h-7 text-surface-300 hover:text-white bg-surface-700/60 hover:bg-surface-600/80 border border-surface-500/40 hover:border-roon-400/50 rounded-lg transition-all duration-200">
               <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M12 5v14M5 12h14"/></svg>
             </button>
@@ -166,7 +179,7 @@
 
         <!-- Options -->
         <section class="bg-surface-800/60 border border-surface-500/40 rounded-xl p-5 backdrop-blur-sm">
-          <h3 class="text-xs font-semibold uppercase tracking-wider text-surface-300 mb-4">Options</h3>
+          <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-200 mb-4">Options</h3>
           <div class="space-y-0">
 
             <!-- Timezone -->
@@ -292,7 +305,7 @@
               </button>
             </div>
             <div class="flex gap-1.5">
-              <button id="btn-copy" aria-label="Copy to clipboard"
+              <button id="btn-copy" data-tooltip="Copy to clipboard" aria-label="Copy to clipboard"
                       class="inline-flex items-center justify-center w-8 h-8 bg-surface-700/60 hover:bg-surface-600/80 border border-surface-500/40 hover:border-roon-400/50 rounded-lg text-surface-300 hover:text-white transition-all duration-200 active:scale-95">
                 <svg id="icon-copy" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
                   <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
@@ -302,7 +315,7 @@
                   <polyline points="20 6 9 17 4 12"></polyline>
                 </svg>
               </button>
-              <button id="btn-download" aria-label="Download file"
+              <button id="btn-download" data-tooltip="Download as file" aria-label="Download file"
                       class="inline-flex items-center justify-center w-8 h-8 bg-surface-700/60 hover:bg-surface-600/80 border border-surface-500/40 hover:border-roon-400/50 rounded-lg text-surface-300 hover:text-white transition-all duration-200 active:scale-95">
                 <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
                   <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
@@ -410,7 +423,8 @@
     });
 
     return {
-      image: getVal('image') || 'ghcr.io/roonlabs/roonserver:latest',
+      image: 'ghcr.io/roonlabs/roonserver:latest',
+      channel: getVal('channel-select') || 'production',
       volRoon: getVal('vol-roon') || '/Roon',
       volMusic: getVal('vol-music') || '/music',
       extraVolumes: extras,
@@ -434,9 +448,12 @@
     lines.push('    network_mode: host');
     lines.push('    init: true');
 
-    if (cfg.tz) {
+    var envVars = [];
+    if (cfg.channel === 'earlyaccess') envVars.push('ROON_CHANNEL=earlyaccess');
+    if (cfg.tz) envVars.push('TZ=' + cfg.tzValue);
+    if (envVars.length) {
       lines.push('    environment:');
-      lines.push('      - TZ=' + cfg.tzValue);
+      envVars.forEach(function(v) { lines.push('      - ' + v); });
     }
 
     lines.push('    volumes:');
@@ -491,6 +508,9 @@
     parts.push('  --network host \\');
     parts.push('  --init \\');
 
+    if (cfg.channel === 'earlyaccess') {
+      parts.push('  -e ROON_CHANNEL=earlyaccess \\');
+    }
     if (cfg.tz) {
       parts.push('  -e TZ=' + cfg.tzValue + ' \\');
     }
@@ -846,6 +866,7 @@
     var removeBtn = document.createElement('button');
     removeBtn.type = 'button';
     removeBtn.setAttribute('aria-label', 'Remove volume mount');
+    removeBtn.setAttribute('data-tooltip', 'Remove volume mount');
     removeBtn.className = 'inline-flex items-center justify-center w-6 h-6 text-surface-300 hover:text-red-400 transition-colors duration-200 rounded';
     var svgNS = 'http://www.w3.org/2000/svg';
     var svg = document.createElementNS(svgNS, 'svg');
@@ -909,7 +930,11 @@
 
   document.getElementById('tz-value').addEventListener('change', generate);
 
-  document.getElementById('image').addEventListener('change', generate);
+  document.getElementById('channel-select').addEventListener('change', function() {
+    var hint = document.getElementById('channel-hint');
+    hint.textContent = this.value === 'earlyaccess' ? 'Early access to new features and updates.' : '';
+    generate();
+  });
 
   ['opt-tz', 'opt-logging', 'opt-grace', 'opt-cifs', 'opt-usb-audio', 'opt-hdmi-audio'].forEach(function(id) {
     document.getElementById(id).addEventListener('change', generate);
@@ -979,40 +1004,6 @@
     });
   })();
 
-  // --- Fetch available image tags from GHCR ---
-  (function fetchTags() {
-    var imageSelect = document.getElementById('image');
-    var imageHint = document.getElementById('image-hint');
-    fetch('https://ghcr.io/v2/roonlabs/roonserver/tags/list')
-      .then(function(res) {
-        if (!res.ok) throw new Error(res.status);
-        return res.json();
-      })
-      .then(function(data) {
-        var tags = (data.tags || []).sort(function(a, b) {
-          // Put 'latest' first, then sort version tags descending
-          if (a === 'latest') return -1;
-          if (b === 'latest') return 1;
-          return b.localeCompare(a, undefined, { numeric: true });
-        });
-        if (tags.length > 1) {
-          // Clear default and rebuild with fetched tags
-          while (imageSelect.firstChild) imageSelect.removeChild(imageSelect.firstChild);
-          tags.forEach(function(tag) {
-            var opt = document.createElement('option');
-            opt.value = 'ghcr.io/roonlabs/roonserver:' + tag;
-            opt.textContent = tag;
-            if (tag === 'latest') opt.selected = true;
-            imageSelect.appendChild(opt);
-          });
-          imageHint.textContent = tags.length + ' versions available';
-        }
-      })
-      .catch(function() {
-        // Registry unavailable or package is private — keep the default "latest" option
-        imageHint.textContent = '';
-      });
-  })();
 
 
   // --- Detect macOS/Windows and show a note ---
