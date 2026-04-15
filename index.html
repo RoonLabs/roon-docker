@@ -449,7 +449,6 @@
     lines.push('    image: ' + cfg.image);
     lines.push('    container_name: roonserver');
     lines.push('    network_mode: host');
-    lines.push('    init: true');
 
     var envVars = [];
     if (cfg.channel === 'earlyaccess') envVars.push('ROON_CHANNEL=earlyaccess');
@@ -509,7 +508,6 @@
     var parts = ['docker run -d \\'];
     parts.push('  --name roonserver \\');
     parts.push('  --network host \\');
-    parts.push('  --init \\');
 
     if (cfg.channel === 'earlyaccess') {
       parts.push('  -e ROON_CHANNEL=earlyaccess \\');

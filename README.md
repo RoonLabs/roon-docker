@@ -19,7 +19,6 @@ On first start, the container downloads and installs RoonServer automatically. S
 - **Linux host** (amd64 / x86_64) — NAS devices (Synology, QNAP, Unraid, TrueNAS) work well
 - **Host networking** (`--net=host`) — required for Roon's multicast device discovery
 - **Restart policy** (`--restart unless-stopped`) — ensures the container restarts after updates or unexpected exits
-- **Init process** (`--init`) — ensures clean signal handling and zombie process reaping
 - **Stop timeout** (`--stop-timeout 45`) — gives Roon time to flush its database on shutdown
 
 Docker Desktop for macOS and Windows does not support multicast and will not work for production use.
