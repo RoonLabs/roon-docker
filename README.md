@@ -18,7 +18,7 @@ On first start, the container downloads and installs RoonServer automatically. S
 
 - **Linux host** (amd64 / x86_64) — NAS devices (Synology, QNAP, Unraid, TrueNAS) work well
 - **Host networking** (`--net=host`) — required for Roon's multicast device discovery
-- **Restart policy** (`--restart unless-stopped`) — Roon exits with code 122 to request restarts
+- **Restart policy** (`--restart unless-stopped`) — ensures the container restarts after updates or unexpected exits
 - **Init process** (`--init`) — ensures clean signal handling and zombie process reaping
 - **Stop timeout** (`--stop-timeout 45`) — gives Roon time to flush its database on shutdown
 
@@ -37,8 +37,6 @@ Set the `TZ` environment variable to your [timezone](https://en.wikipedia.org/wi
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `TZ` | `UTC` | Timezone for logs and schedules |
-| `ROON_DATAROOT` | `/Roon/data` | Data directory (set in image, don't change) |
-| `ROON_ID_DIR` | `/Roon/data` | Identity directory (set in image, don't change) |
 | `ROON_CHANNEL` | `production` | Release channel: `production` or `earlyaccess` |
 | `ROON_DOWNLOAD_URL` | *(default CDN)* | Override the RoonServer download URL |
 

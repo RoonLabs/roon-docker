@@ -1,9 +1,12 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
+export ROON_DATAROOT="/Roon/data"
+export ROON_ID_DIR="/Roon/data"
+
 ROON_APP_DIR="/Roon/app"
 ROON_INSTALLED="${ROON_APP_DIR}/.installed"
-ROON_CHANNEL_FILE="${ROON_APP_DIR}/.channel"
+ROON_CHANNEL_FILE="/Roon/.channel"
 
 # Channel selection: production (default) or earlyaccess.
 # If a channel file exists from a previous install and the user hasn't explicitly
@@ -83,5 +86,5 @@ echo "Image:   $(cat /etc/roon-image-version 2>/dev/null || echo 'unknown')"
 echo "Channel: $ROON_CHANNEL"
 echo "Roon:    $(sed -n '2p' "$ROON_INSTALLED" 2>/dev/null || echo 'unknown')"
 
-# start.sh handles restart-on-exit-122 without a full container restart
+# start.sh handles restarts internally without a full container restart
 exec "${ROON_APP_DIR}/RoonServer/start.sh"

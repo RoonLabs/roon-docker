@@ -35,9 +35,6 @@ LABEL org.opencontainers.image.created="${BUILD_DATE}"
 LABEL org.opencontainers.image.url="https://roon.app"
 LABEL org.opencontainers.image.licenses="Proprietary"
 
-ENV ROON_DATAROOT=/Roon/data
-ENV ROON_ID_DIR=/Roon/data
-
 # Runtime dependencies:
 #   curl            — downloads RoonServer on first run
 #   bzip2           — extracts the .tar.bz2 tarball
@@ -71,5 +68,5 @@ STOPSIGNAL SIGTERM
 
 # entrypoint.sh downloads RoonServer on first run (to /Roon/app), then
 # exec's into start.sh — the stock bash launcher that handles
-# .NET runtime discovery, ulimit, self-update swap, and restart (exit 122).
+# .NET runtime discovery, ulimit, self-update swap, and restart.
 ENTRYPOINT ["/entrypoint.sh"]
