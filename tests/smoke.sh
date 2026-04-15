@@ -29,12 +29,12 @@ for bin in bash curl bzip2 tar ffmpeg; do
         docker run --rm --entrypoint which "$IMAGE" "$bin"
 done
 
-# Environment variables
-check "ROON_DATAROOT is /Roon/data" \
-    docker run --rm --entrypoint sh "$IMAGE" -c '[ "$ROON_DATAROOT" = "/Roon/data" ]'
+# Environment variables (ROON_DATAROOT and ROON_ID_DIR are set by entrypoint, not the image)
+check "ROON_DATAROOT not leaked in image env" \
+    docker run --rm --entrypoint sh "$IMAGE" -c '[ -z "$ROON_DATAROOT" ]'
 
-check "ROON_ID_DIR is /Roon/data" \
-    docker run --rm --entrypoint sh "$IMAGE" -c '[ "$ROON_ID_DIR" = "/Roon/data" ]'
+check "ROON_ID_DIR not leaked in image env" \
+    docker run --rm --entrypoint sh "$IMAGE" -c '[ -z "$ROON_ID_DIR" ]'
 
 # Image version file
 check "/etc/roon-image-version exists" \
@@ -90,6 +90,11 @@ check "exits with error when /Roon is read-only" \
 
 check "prints writable error when /Roon is read-only" \
     sh -c 'echo "$1" | grep -q "not writable"' _ "$RO_OUTPUT"
+
+# Timezone: verify TZ env var is honored by the container
+TZ_OUTPUT=$(docker run --rm --entrypoint sh -e TZ=America/Denver "$IMAGE" -c 'date +%Z' 2>/dev/null)
+check "TZ=America/Denver produces MDT or MST (got $TZ_OUTPUT)" \
+    sh -c '[ "$1" = "MDT" ] || [ "$1" = "MST" ]' _ "$TZ_OUTPUT"
 
 # Bad download URL should fail
 BAD_EXIT=0

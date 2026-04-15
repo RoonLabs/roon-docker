@@ -87,10 +87,10 @@ check "logs contain roon version" \
     grep -q "^Roon:" "$ROON_DIR/container.log"
 
 check "channel sentinel file created" \
-    test -f "$ROON_DIR/app/.channel"
+    test -f "$ROON_DIR/.channel"
 
 check "channel sentinel contains production" \
-    grep -q "production" "$ROON_DIR/app/.channel"
+    grep -q "production" "$ROON_DIR/.channel"
 
 # Record production version for later comparison
 PROD_VERSION=$(cat "$ROON_DIR/app/.installed" 2>/dev/null || echo "")
@@ -129,7 +129,7 @@ docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 docker rm -f "$CONTAINER" 2>/dev/null || true
 
 check "production installed before switch" \
-    grep -q "production" "$ROON_DIR/app/.channel"
+    grep -q "production" "$ROON_DIR/.channel"
 
 # Now: switch to earlyaccess
 # The entrypoint detects .channel=production vs ROON_CHANNEL=earlyaccess, removes old binaries,
@@ -142,7 +142,7 @@ docker run -d --name "$CONTAINER" \
 echo "    Waiting for channel switch..."
 TIMEOUT=180
 ELAPSED=0
-while ! grep -q "earlyaccess" "$ROON_DIR/app/.channel" 2>/dev/null && [ "$ELAPSED" -lt "$TIMEOUT" ]; do
+while ! grep -q "earlyaccess" "$ROON_DIR/.channel" 2>/dev/null && [ "$ELAPSED" -lt "$TIMEOUT" ]; do
     sleep 5
     ELAPSED=$((ELAPSED + 5))
     echo "    ... ${ELAPSED}s"
@@ -154,7 +154,7 @@ check "logs show channel change detected" \
     grep -q "Channel change detected" "$ROON_DIR/switch.log"
 
 check "channel sentinel updated to earlyaccess" \
-    grep -q "earlyaccess" "$ROON_DIR/app/.channel"
+    grep -q "earlyaccess" "$ROON_DIR/.channel"
 
 check "logs show earlyaccess channel" \
     grep -q "^Channel: earlyaccess" "$ROON_DIR/switch.log"
@@ -244,7 +244,7 @@ docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 docker rm -f "$CONTAINER" 2>/dev/null || true
 
 # Simulate pre-channel image: remove .channel but keep .installed
-rm -f "$ROON_DIR/app/.channel"
+rm -f "$ROON_DIR/.channel"
 
 # Restart without setting ROON_CHANNEL — should default to production and backfill .channel
 docker run -d --name "$CONTAINER" \
@@ -254,10 +254,10 @@ docker run -d --name "$CONTAINER" \
 sleep 5
 
 check "backfills .channel on pre-channel install" \
-    test -f "$ROON_DIR/app/.channel"
+    test -f "$ROON_DIR/.channel"
 
 check "backfilled channel is production" \
-    grep -q "production" "$ROON_DIR/app/.channel"
+    grep -q "production" "$ROON_DIR/.channel"
 
 docker logs "$CONTAINER" > "$ROON_DIR/upgrade.log" 2>&1 || true
 
@@ -268,7 +268,7 @@ docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 docker rm -f "$CONTAINER" 2>/dev/null || true
 
 # Now simulate: pre-channel install + user wants EA
-rm -f "$ROON_DIR/app/.channel"
+rm -f "$ROON_DIR/.channel"
 
 docker run -d --name "$CONTAINER" \
     -v "$ROON_DIR:/Roon" \
@@ -278,14 +278,14 @@ docker run -d --name "$CONTAINER" \
 echo "    Waiting for EA reinstall..."
 TIMEOUT=180
 ELAPSED=0
-while ! grep -q "earlyaccess" "$ROON_DIR/app/.channel" 2>/dev/null && [ "$ELAPSED" -lt "$TIMEOUT" ]; do
+while ! grep -q "earlyaccess" "$ROON_DIR/.channel" 2>/dev/null && [ "$ELAPSED" -lt "$TIMEOUT" ]; do
     sleep 5
     ELAPSED=$((ELAPSED + 5))
     echo "    ... ${ELAPSED}s"
 done
 
 check "pre-channel install switches to EA when requested" \
-    grep -q "earlyaccess" "$ROON_DIR/app/.channel"
+    grep -q "earlyaccess" "$ROON_DIR/.channel"
 
 docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 
