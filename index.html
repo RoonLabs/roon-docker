@@ -114,8 +114,11 @@
       <div class="lg:col-span-5 space-y-5">
 
         <!-- Platform Selector -->
-        <section class="bg-surface-800/60 border border-surface-500/40 rounded-xl p-5 backdrop-blur-sm">
-          <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-200 mb-3">Platform</h3>
+        <section class="bg-surface-800/60 border border-surface-500/40 rounded-xl p-5 backdrop-blur-sm ring-1 ring-roon-400/40">
+          <div class="flex items-center gap-2 mb-3">
+            <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-200">Platform</h3>
+            <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/20">Select your platform</span>
+          </div>
           <label for="platform-select" class="sr-only">Select your platform</label>
           <select id="platform-select"
                   class="w-full px-3 py-2 bg-surface-700 border border-surface-500/50 rounded-lg text-sm text-slate-200 focus:border-roon-400 focus:ring-1 focus:ring-roon-400 transition-colors duration-200 outline-none appearance-none"
@@ -525,9 +528,11 @@
       parts.push('  --stop-timeout 45 \\');
     }
 
+    if (cfg.logging) {
+      parts.push('  --log-driver local \\');
+    }
+
     parts.push('  --restart unless-stopped \\');
-
-
 
     if (cfg.cifs) {
       parts.push('  --cap-add SYS_ADMIN \\');
@@ -548,15 +553,7 @@
       parts.push('  --group-add audio \\');
     }
 
-    if (cfg.logging) {
-      parts.push('  --log-driver local \\');
-    }
-
-    // Remove trailing backslash from last option line
-    var lastIdx = parts.length - 1;
-    parts[lastIdx] = parts[lastIdx].replace(/ \\$/, '');
-
-    // Image as final line
+    // Image as final line (no trailing backslash)
     parts.push('  ' + cfg.image);
 
     return parts;
