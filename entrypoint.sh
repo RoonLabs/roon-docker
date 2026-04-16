@@ -70,10 +70,6 @@ if [ "$NEEDS_INSTALL" = true ]; then
     tar xjf /tmp/RoonServer.tar.bz2 -C "$ROON_APP_DIR" --no-same-permissions --no-same-owner
     rm -f /tmp/RoonServer.tar.bz2
 
-    # libharfbuzz.so links against libfreetype.so.6 but bundled lib has no soname suffix
-    ln -sf "${ROON_APP_DIR}/RoonServer/Appliance/libfreetype.so" \
-           "${ROON_APP_DIR}/RoonServer/Appliance/libfreetype.so.6"
-
     echo "RoonServer installed successfully."
 fi
 
