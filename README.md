@@ -37,7 +37,7 @@ Set the `TZ` environment variable to your [timezone](https://en.wikipedia.org/wi
 |----------|---------|---------|
 | `TZ` | `UTC` | Timezone for logs and schedules |
 | `ROON_INSTALL_BRANCH` | `production` | Release channel: `production` or `earlyaccess` |
-| `ROON_DOWNLOAD_URL` | *(default CDN)* | Override the RoonServer download URL |
+| `ROON_DOWNLOAD_URL` | *(from Roon servers)* | Override the RoonServer download URL |
 
 ## Volumes
 
@@ -56,9 +56,9 @@ We recommend using Roon's built-in backup feature (Settings > Backups) pointed a
 
 ## Updating
 
-RoonServer updates itself automatically. When an update is available, the container will download and apply it — no action needed.
+When an update is available, RoonServer will download and install it automatically. A restart is required to apply the update, which can be triggered from a Roon remote. The Docker image plays no role in the update process.
 
-Updates persist across `docker stop` / `docker start`. If you recreate the container (`docker rm` + `docker run`), RoonServer will be re-downloaded from the configured release channel on first start.
+All RoonServer state and binaries are persisted to the `/Roon` volume. Recreating the container (`docker rm` + `docker run`) does not trigger a re-download.
 
 ## Release Channel
 

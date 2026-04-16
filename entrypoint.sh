@@ -65,7 +65,7 @@ if [ "$NEEDS_INSTALL" = true ]; then
     esac
 
     echo "RoonServer not found — downloading..."
-    curl -fL --progress-bar -o /tmp/RoonServer.tar.bz2 "$ROON_DOWNLOAD_URL"
+    curl -fL --retry 2 --progress-bar -o /tmp/RoonServer.tar.bz2 "$ROON_DOWNLOAD_URL"
     echo "Extracting..."
     tar xjf /tmp/RoonServer.tar.bz2 -C "$ROON_APP_DIR" --no-same-permissions --no-same-owner
     rm -f /tmp/RoonServer.tar.bz2
