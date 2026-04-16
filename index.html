@@ -233,23 +233,6 @@
               </div>
             </div>
 
-            <!-- Grace period -->
-            <div class="py-3 border-b border-surface-500/30">
-              <div class="flex items-start gap-3">
-                <label class="relative inline-flex items-center cursor-pointer mt-0.5 flex-shrink-0">
-                  <input type="checkbox" id="opt-grace" class="sr-only peer" checked>
-                  <div class="toggle-track"></div>
-                </label>
-                <div class="flex-1 min-w-0">
-                  <div class="flex items-center gap-2 flex-wrap">
-                    <label class="text-sm font-medium text-white cursor-pointer" for="opt-grace">Stop grace period (45s)</label>
-                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/20">Recommended</span>
-                  </div>
-                  <p class="text-xs text-surface-300 mt-0.5">Give Roon time to flush the database on shutdown. Default Docker timeout is 10s which may not be enough.</p>
-                </div>
-              </div>
-            </div>
-
             <!-- CIFS -->
             <div class="py-3 border-b border-surface-500/30">
               <div class="flex items-start gap-3">
@@ -441,7 +424,6 @@
       tz: isChecked('opt-tz'),
       tzValue: getVal('tz-value'),
       logging: isChecked('opt-logging'),
-      grace: isChecked('opt-grace'),
       cifs: isChecked('opt-cifs'),
       usbAudio: isChecked('opt-usb-audio'),
       hdmiAudio: isChecked('opt-hdmi-audio'),
@@ -474,10 +456,6 @@
     });
     if (cfg.usbAudio) {
       lines.push('      - /run/udev:/run/udev:ro');
-    }
-
-    if (cfg.grace) {
-      lines.push('    stop_grace_period: 45s');
     }
 
     lines.push('    restart: unless-stopped');
@@ -530,10 +508,6 @@
     cfg.extraVolumes.forEach(function(v) {
       parts.push('  -v ' + v.host + ':' + v.container + ' \\');
     });
-
-    if (cfg.grace) {
-      parts.push('  --stop-timeout 45 \\');
-    }
 
     if (cfg.logging) {
       parts.push('  --log-driver local \\');
@@ -941,7 +915,7 @@
     generate();
   });
 
-  ['opt-tz', 'opt-logging', 'opt-grace', 'opt-cifs', 'opt-usb-audio', 'opt-hdmi-audio'].forEach(function(id) {
+  ['opt-tz', 'opt-logging', 'opt-cifs', 'opt-usb-audio', 'opt-hdmi-audio'].forEach(function(id) {
     document.getElementById(id).addEventListener('change', generate);
   });
 
