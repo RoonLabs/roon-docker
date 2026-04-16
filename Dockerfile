@@ -64,8 +64,6 @@ EXPOSE 9003/udp 9100-9200/tcp 9200-9250/tcp 9330-9339/tcp 55000/tcp
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
     CMD grep -ql '[R]oonServer.dll' /proc/[0-9]*/cmdline 2>/dev/null || exit 1
 
-STOPSIGNAL SIGTERM
-
 # entrypoint.sh downloads RoonServer on first run (to /Roon/app), then
 # exec's into start.sh — the stock bash launcher that handles
 # .NET runtime discovery, ulimit, self-update swap, and restart.
