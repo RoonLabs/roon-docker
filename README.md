@@ -36,7 +36,7 @@ Set the `TZ` environment variable to your [timezone](https://en.wikipedia.org/wi
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `TZ` | `UTC` | Timezone for logs and schedules |
-| `ROON_CHANNEL` | `production` | Release channel: `production` or `earlyaccess` |
+| `ROON_INSTALL_BRANCH` | `production` | Release channel: `production` or `earlyaccess` |
 | `ROON_DOWNLOAD_URL` | *(default CDN)* | Override the RoonServer download URL |
 
 ## Volumes
@@ -72,12 +72,12 @@ Updates persist across `docker stop` / `docker start`. If you recreate the conta
 
 RoonServer has two release channels:
 
-| Channel | `ROON_CHANNEL` | Community |
+| Channel | `ROON_INSTALL_BRANCH` | Community |
 |---------|----------------|-----------|
 | **Production** | `production` (default) | [Roon](https://community.roonlabs.com/c/roon/8) |
 | **Early Access** | `earlyaccess` | [Early Access](https://community.roonlabs.com/c/early-access/120) |
 
-Set `ROON_CHANNEL` to change the channel. The channel determines which version of RoonServer is downloaded on first start, and Roon's self-updater continues on the same channel automatically.
+Set `ROON_INSTALL_BRANCH` to change the channel. The channel determines which version of RoonServer is downloaded on first start, and Roon's self-updater continues on the same channel automatically.
 
 Changing channels on an existing install is safe — the container removes the old binaries and downloads from the new channel. Your data, settings, and identity are preserved.
 

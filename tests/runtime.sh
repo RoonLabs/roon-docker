@@ -24,7 +24,7 @@ wait_for_install() {
     local timeout="${2:-120}"
     local elapsed=0
     echo "    Waiting for RoonServer download..."
-    while [ ! -f "$dir/app/.installed" ] && [ "$elapsed" -lt "$timeout" ]; do
+    while [ ! -f "$dir/app/RoonServer/VERSION" ] && [ "$elapsed" -lt "$timeout" ]; do
         sleep 5
         elapsed=$((elapsed + 5))
         echo "    ... ${elapsed}s"
@@ -51,11 +51,14 @@ docker run -d --name "$CONTAINER" \
 
 wait_for_install "$ROON_DIR"
 
-check "sentinel file created" \
-    test -f "$ROON_DIR/app/.installed"
+check "VERSION file created" \
+    test -f "$ROON_DIR/app/RoonServer/VERSION"
 
-check "sentinel contains version info" \
-    grep -q "build" "$ROON_DIR/app/.installed"
+check "VERSION contains build info" \
+    grep -q "build" "$ROON_DIR/app/RoonServer/VERSION"
+
+check "VERSION last line is production" \
+    sh -c '[ "$(tail -1 "$1")" = "production" ]' _ "$ROON_DIR/app/RoonServer/VERSION"
 
 check "RoonServer directory exists" \
     test -d "$ROON_DIR/app/RoonServer"
@@ -68,9 +71,6 @@ check "Server/RoonServer launcher exists" \
 
 check "RoonDotnet runtime exists" \
     test -d "$ROON_DIR/app/RoonServer/RoonDotnet"
-
-check "VERSION file present in tarball" \
-    test -f "$ROON_DIR/app/RoonServer/VERSION"
 
 check "libfreetype.so.6 symlink created" \
     test -L "$ROON_DIR/app/RoonServer/Appliance/libfreetype.so.6"
@@ -86,14 +86,8 @@ check "logs contain channel" \
 check "logs contain roon version" \
     grep -q "^Roon:" "$ROON_DIR/container.log"
 
-check "channel sentinel file created" \
-    test -f "$ROON_DIR/.channel"
-
-check "channel sentinel contains production" \
-    grep -q "production" "$ROON_DIR/.channel"
-
 # Record production version for later comparison
-PROD_VERSION=$(cat "$ROON_DIR/app/.installed" 2>/dev/null || echo "")
+PROD_VERSION=$(sed -n '2p' "$ROON_DIR/app/RoonServer/VERSION" 2>/dev/null || echo "")
 
 echo "    Testing clean shutdown..."
 docker stop -t 30 "$CONTAINER" 2>/dev/null || true
@@ -102,6 +96,45 @@ check "clean shutdown (exit 0 or 143, got $EXIT_CODE)" \
     test "$EXIT_CODE" -eq 0 -o "$EXIT_CODE" -eq 143
 
 cleanup_production
+trap - EXIT
+
+# ─── Fresh EA install ──────────────────────────────────────────
+
+echo ""
+echo "=== Runtime tests (fresh EA install): $IMAGE ==="
+
+CONTAINER="roon-runtime-ea-fresh"
+ROON_DIR="$(mktemp -d)"
+echo "    Temp dir: $ROON_DIR"
+
+cleanup_ea_fresh() {
+    docker rm -f "$CONTAINER" 2>/dev/null || true
+    rm -rf "$ROON_DIR"
+}
+trap cleanup_ea_fresh EXIT
+
+docker run -d --name "$CONTAINER" \
+    -v "$ROON_DIR:/Roon" \
+    -e ROON_INSTALL_BRANCH=earlyaccess \
+    "$IMAGE"
+
+wait_for_install "$ROON_DIR"
+
+check "fresh EA: VERSION file created" \
+    test -f "$ROON_DIR/app/RoonServer/VERSION"
+
+check "fresh EA: VERSION last line is earlyaccess" \
+    sh -c '[ "$(tail -1 "$1")" = "earlyaccess" ]' _ "$ROON_DIR/app/RoonServer/VERSION"
+
+sleep 3
+docker logs "$CONTAINER" > "$ROON_DIR/ea-fresh.log" 2>&1 || true
+
+check "fresh EA: logs show earlyaccess channel" \
+    grep -q "^Channel: earlyaccess" "$ROON_DIR/ea-fresh.log"
+
+docker stop -t 10 "$CONTAINER" 2>/dev/null || true
+
+cleanup_ea_fresh
 trap - EXIT
 
 # ─── Channel switch: production → earlyaccess ─────────────────
@@ -129,44 +162,42 @@ docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 docker rm -f "$CONTAINER" 2>/dev/null || true
 
 check "production installed before switch" \
-    grep -q "production" "$ROON_DIR/.channel"
+    sh -c '[ "$(tail -1 "$1")" = "production" ]' _ "$ROON_DIR/app/RoonServer/VERSION"
 
 # Now: switch to earlyaccess
-# The entrypoint detects .channel=production vs ROON_CHANNEL=earlyaccess, removes old binaries,
-# and re-downloads. We wait for .channel to change to earlyaccess as the completion signal.
+# The entrypoint detects VERSION branch=production vs ROON_INSTALL_BRANCH=earlyaccess,
+# removes old binaries, and re-downloads. We wait for the VERSION file to reappear with earlyaccess.
 docker run -d --name "$CONTAINER" \
     -v "$ROON_DIR:/Roon" \
-    -e ROON_CHANNEL=earlyaccess \
+    -e ROON_INSTALL_BRANCH=earlyaccess \
     "$IMAGE"
 
 echo "    Waiting for channel switch..."
 TIMEOUT=180
 ELAPSED=0
-while ! grep -q "earlyaccess" "$ROON_DIR/.channel" 2>/dev/null && [ "$ELAPSED" -lt "$TIMEOUT" ]; do
+while ! tail -1 "$ROON_DIR/app/RoonServer/VERSION" 2>/dev/null | grep -q "earlyaccess" && [ "$ELAPSED" -lt "$TIMEOUT" ]; do
     sleep 5
     ELAPSED=$((ELAPSED + 5))
     echo "    ... ${ELAPSED}s"
 done
 
+sleep 3
 docker logs "$CONTAINER" > "$ROON_DIR/switch.log" 2>&1 || true
 
-check "logs show channel change detected" \
-    grep -q "Channel change detected" "$ROON_DIR/switch.log"
+check "logs show branch change detected" \
+    grep -q "Branch change detected" "$ROON_DIR/switch.log"
 
-check "channel sentinel updated to earlyaccess" \
-    grep -q "earlyaccess" "$ROON_DIR/.channel"
+check "VERSION last line is earlyaccess" \
+    sh -c '[ "$(tail -1 "$1")" = "earlyaccess" ]' _ "$ROON_DIR/app/RoonServer/VERSION"
 
 check "logs show earlyaccess channel" \
     grep -q "^Channel: earlyaccess" "$ROON_DIR/switch.log"
 
-check "RoonServer reinstalled after switch" \
-    test -f "$ROON_DIR/app/.installed"
-
 # EA version may differ from production
-EA_VERSION=$(cat "$ROON_DIR/app/.installed" 2>/dev/null || echo "")
+EA_VERSION=$(sed -n '2p' "$ROON_DIR/app/RoonServer/VERSION" 2>/dev/null || echo "")
 if [ -n "$PROD_VERSION" ] && [ -n "$EA_VERSION" ]; then
-    echo "    Production version: $(echo "$PROD_VERSION" | head -2 | tail -1)"
-    echo "    EA version:     $(echo "$EA_VERSION" | head -2 | tail -1)"
+    echo "    Production version: $PROD_VERSION"
+    echo "    EA version:         $EA_VERSION"
 fi
 
 docker stop -t 10 "$CONTAINER" 2>/dev/null || true
@@ -215,11 +246,27 @@ check "restart logs channel" \
     grep -q "^Channel: production" "$ROON_DIR/restart.log"
 
 docker stop -t 10 "$CONTAINER" 2>/dev/null || true
+docker rm -f "$CONTAINER" 2>/dev/null || true
+
+# Explicit ROON_INSTALL_BRANCH=production on existing production — should also skip download
+docker run -d --name "$CONTAINER" \
+    -v "$ROON_DIR:/Roon" \
+    -e ROON_INSTALL_BRANCH=production \
+    "$IMAGE"
+
+sleep 5
+
+docker logs "$CONTAINER" > "$ROON_DIR/explicit.log" 2>&1 || true
+
+check "explicit production on existing production skips download" \
+    sh -c '! grep -q "downloading" "$1"' _ "$ROON_DIR/explicit.log"
+
+docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 
 cleanup_restart
 trap - EXIT
 
-# ─── Pre-channel upgrade: .installed exists, no .channel ───────
+# ─── Pre-channel upgrade: VERSION exists, user requests EA ─────
 
 echo ""
 echo "=== Runtime tests (pre-channel upgrade): $IMAGE ==="
@@ -243,49 +290,41 @@ wait_for_install "$ROON_DIR"
 docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 docker rm -f "$CONTAINER" 2>/dev/null || true
 
-# Simulate pre-channel image: remove .channel but keep .installed
-rm -f "$ROON_DIR/.channel"
-
-# Restart without setting ROON_CHANNEL — should default to production and backfill .channel
+# Restart without setting ROON_INSTALL_BRANCH — should keep production
 docker run -d --name "$CONTAINER" \
     -v "$ROON_DIR:/Roon" \
     "$IMAGE"
 
 sleep 5
 
-check "backfills .channel on pre-channel install" \
-    test -f "$ROON_DIR/.channel"
-
-check "backfilled channel is production" \
-    grep -q "production" "$ROON_DIR/.channel"
-
 docker logs "$CONTAINER" > "$ROON_DIR/upgrade.log" 2>&1 || true
 
-check "pre-channel restart does not re-download" \
+check "unset ROON_INSTALL_BRANCH keeps existing install" \
     sh -c '! grep -q "downloading" "$1"' _ "$ROON_DIR/upgrade.log"
+
+check "unset ROON_INSTALL_BRANCH logs production" \
+    grep -q "^Channel: production" "$ROON_DIR/upgrade.log"
 
 docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 docker rm -f "$CONTAINER" 2>/dev/null || true
 
-# Now simulate: pre-channel install + user wants EA
-rm -f "$ROON_DIR/.channel"
-
+# Now request EA on existing production install
 docker run -d --name "$CONTAINER" \
     -v "$ROON_DIR:/Roon" \
-    -e ROON_CHANNEL=earlyaccess \
+    -e ROON_INSTALL_BRANCH=earlyaccess \
     "$IMAGE"
 
 echo "    Waiting for EA reinstall..."
 TIMEOUT=180
 ELAPSED=0
-while ! grep -q "earlyaccess" "$ROON_DIR/.channel" 2>/dev/null && [ "$ELAPSED" -lt "$TIMEOUT" ]; do
+while ! tail -1 "$ROON_DIR/app/RoonServer/VERSION" 2>/dev/null | grep -q "earlyaccess" && [ "$ELAPSED" -lt "$TIMEOUT" ]; do
     sleep 5
     ELAPSED=$((ELAPSED + 5))
     echo "    ... ${ELAPSED}s"
 done
 
-check "pre-channel install switches to EA when requested" \
-    grep -q "earlyaccess" "$ROON_DIR/.channel"
+check "explicit ROON_INSTALL_BRANCH switches to EA" \
+    sh -c '[ "$(tail -1 "$1")" = "earlyaccess" ]' _ "$ROON_DIR/app/RoonServer/VERSION"
 
 docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 

@@ -451,7 +451,7 @@
     lines.push('    network_mode: host');
 
     var envVars = [];
-    if (cfg.channel === 'earlyaccess') envVars.push('ROON_CHANNEL=earlyaccess');
+    if (cfg.channel === 'earlyaccess') envVars.push('ROON_INSTALL_BRANCH=earlyaccess');
     if (cfg.tz) envVars.push('TZ=' + cfg.tzValue);
     if (envVars.length) {
       lines.push('    environment:');
@@ -510,7 +510,7 @@
     parts.push('  --network host \\');
 
     if (cfg.channel === 'earlyaccess') {
-      parts.push('  -e ROON_CHANNEL=earlyaccess \\');
+      parts.push('  -e ROON_INSTALL_BRANCH=earlyaccess \\');
     }
     if (cfg.tz) {
       parts.push('  -e TZ=' + cfg.tzValue + ' \\');
