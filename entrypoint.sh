@@ -59,10 +59,7 @@ fi
 
 # Download and install RoonServer if needed
 if [ "$NEEDS_INSTALL" = true ]; then
-    case "$ROON_INSTALL_BRANCH" in
-        production)  ROON_DOWNLOAD_URL="${ROON_DOWNLOAD_URL:-https://download.roonlabs.net/builds/RoonServer_linuxx64.tar.bz2}" ;;
-        earlyaccess) ROON_DOWNLOAD_URL="${ROON_DOWNLOAD_URL:-https://download.roonlabs.net/builds/earlyaccess/RoonServer_linuxx64.tar.bz2}" ;;
-    esac
+    ROON_DOWNLOAD_URL="${ROON_DOWNLOAD_URL:-https://download.roonlabs.net/builds/${ROON_INSTALL_BRANCH}/RoonServer_linuxx64.tar.bz2}"
 
     echo "RoonServer not found — downloading..."
     curl -fL --retry 2 --progress-bar -o /tmp/RoonServer.tar.bz2 "$ROON_DOWNLOAD_URL"

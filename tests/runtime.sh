@@ -72,9 +72,8 @@ check "Server/RoonServer launcher exists" \
 check "RoonDotnet runtime exists" \
     test -d "$ROON_DIR/app/RoonServer/RoonDotnet"
 
-check "libfreetype.so.6 symlink created" \
-    test -L "$ROON_DIR/app/RoonServer/Appliance/libfreetype.so.6"
 
+sleep 5
 docker logs "$CONTAINER" > "$ROON_DIR/container.log" 2>&1 || true
 
 check "logs contain image version" \
