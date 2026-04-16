@@ -45,8 +45,7 @@ All Roon state lives under a single `/Roon` mount:
 
 | Path | Purpose |
 |------|---------|
-| `/Roon/data` | Database, settings, cache, and identity |
-| `/Roon/backup` | Roon backup destination |
+| `/Roon/database` | Database, settings, cache, and identity |
 | `/Roon/app` | Downloaded RoonServer binaries |
 | `/music` | Your music library (mounted read-only) |
 
@@ -55,7 +54,7 @@ All Roon state lives under a single `/Roon` mount:
 -v /Music:/music:ro
 ```
 
-**The `/Roon/data` directory is critical.** If this volume is lost:
+**The `/Roon/database` directory is critical.** If this volume is lost:
 
 - Your Roon data and settings are lost unless they can be restored from a Roon backup
 - The server will appear as a new machine and must be re-authorized from a Roon remote
@@ -91,7 +90,7 @@ Changing channels on an existing install is safe — the container removes the o
 
 **First start is slow** — RoonServer (~200MB) is downloaded on first run. Subsequent starts are instant.
 
-**Logs** — `docker logs roonserver` or inside the volume at `/Roon/data/RoonServer/Logs/`.
+**Logs** — `docker logs roonserver` or inside the volume at `/Roon/database/RoonServer/Logs/`.
 
 ## License
 

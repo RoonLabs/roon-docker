@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-export ROON_DATAROOT="/Roon/data"
-export ROON_ID_DIR="/Roon/data"
+export ROON_DATAROOT="/Roon/database"
+export ROON_ID_DIR="/Roon/database"
 
 ROON_APP_DIR="/Roon/app"
 VERSION_FILE="${ROON_APP_DIR}/RoonServer/VERSION"
@@ -14,7 +14,7 @@ if test ! -w /Roon; then
 fi
 
 # Ensure directory structure exists
-mkdir -p /Roon/{app,data,backup}
+mkdir -p /Roon/{app,database}
 
 # Read the installed branch from the VERSION file (last line)
 INSTALLED_BRANCH=""
