@@ -41,25 +41,18 @@ Set the `TZ` environment variable to your [timezone](https://en.wikipedia.org/wi
 
 ## Volumes
 
-All Roon state lives under a single `/Roon` mount:
+| Mount | Purpose |
+|-------|---------|
+| `/Roon` | RoonServer state — database, settings, identity, and application binaries. Must be writable and persistent. |
+| `/RoonBackup` | Roon backup destination (optional). Configure in Settings > Backups. |
+| `/music` | Your music library (read-only) |
 
-| Path | Purpose |
-|------|---------|
-| `/Roon/database` | Database, settings, cache, and identity |
-| `/Roon/app` | Downloaded RoonServer binaries |
-| `/music` | Your music library (mounted read-only) |
-
-```bash
--v /Roon:/Roon \
--v /Music:/music:ro
-```
-
-**The `/Roon/database` directory is critical.** If this volume is lost:
+**The `/Roon` volume is critical.** If this volume is lost:
 
 - Your Roon data and settings are lost unless they can be restored from a Roon backup
 - The server will appear as a new machine and must be re-authorized from a Roon remote
 
-Always back up your `/Roon` volume. We recommend using Roon's built-in backup feature in Settings > Backups, with `/Roon/backup` as the backup destination
+We recommend using Roon's built-in backup feature (Settings > Backups) pointed at `/RoonBackup`.
 
 ## Updating
 
