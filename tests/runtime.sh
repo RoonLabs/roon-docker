@@ -39,12 +39,6 @@ CONTAINER="roon-runtime-production"
 ROON_DIR="$(mktemp -d)"
 echo "    Temp dir: $ROON_DIR"
 
-cleanup_production() {
-    docker rm -f "$CONTAINER" 2>/dev/null || true
-    rm -rf "$ROON_DIR"
-}
-trap cleanup_production EXIT
-
 docker run -d --name "$CONTAINER" \
     -v "$ROON_DIR:/Roon" \
     "$IMAGE"
@@ -94,7 +88,6 @@ EXIT_CODE=$(docker inspect "$CONTAINER" --format '{{.State.ExitCode}}')
 check "clean shutdown (exit 0 or 143, got $EXIT_CODE)" \
     test "$EXIT_CODE" -eq 0 -o "$EXIT_CODE" -eq 143
 
-cleanup_production
 trap - EXIT
 
 # ─── Fresh EA install ──────────────────────────────────────────
@@ -105,12 +98,6 @@ echo "=== Runtime tests (fresh EA install): $IMAGE ==="
 CONTAINER="roon-runtime-ea-fresh"
 ROON_DIR="$(mktemp -d)"
 echo "    Temp dir: $ROON_DIR"
-
-cleanup_ea_fresh() {
-    docker rm -f "$CONTAINER" 2>/dev/null || true
-    rm -rf "$ROON_DIR"
-}
-trap cleanup_ea_fresh EXIT
 
 docker run -d --name "$CONTAINER" \
     -v "$ROON_DIR:/Roon" \
@@ -133,7 +120,6 @@ check "fresh EA: logs show earlyaccess channel" \
 
 docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 
-cleanup_ea_fresh
 trap - EXIT
 
 # ─── Channel switch: production → earlyaccess ─────────────────
@@ -144,12 +130,6 @@ echo "=== Runtime tests (channel switch → earlyaccess): $IMAGE ==="
 CONTAINER="roon-runtime-switch"
 ROON_DIR="$(mktemp -d)"
 echo "    Temp dir: $ROON_DIR"
-
-cleanup_switch() {
-    docker rm -f "$CONTAINER" 2>/dev/null || true
-    rm -rf "$ROON_DIR"
-}
-trap cleanup_switch EXIT
 
 # First: install production
 docker run -d --name "$CONTAINER" \
@@ -201,7 +181,6 @@ fi
 
 docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 
-cleanup_switch
 trap - EXIT
 
 # ─── Restart: existing install skips re-download ───────────────
@@ -212,12 +191,6 @@ echo "=== Runtime tests (restart skips download): $IMAGE ==="
 CONTAINER="roon-runtime-restart"
 ROON_DIR="$(mktemp -d)"
 echo "    Temp dir: $ROON_DIR"
-
-cleanup_restart() {
-    docker rm -f "$CONTAINER" 2>/dev/null || true
-    rm -rf "$ROON_DIR"
-}
-trap cleanup_restart EXIT
 
 # Install production first
 docker run -d --name "$CONTAINER" \
@@ -262,7 +235,6 @@ check "explicit production on existing production skips download" \
 
 docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 
-cleanup_restart
 trap - EXIT
 
 # ─── Pre-channel upgrade: VERSION exists, user requests EA ─────
@@ -273,12 +245,6 @@ echo "=== Runtime tests (pre-channel upgrade): $IMAGE ==="
 CONTAINER="roon-runtime-upgrade"
 ROON_DIR="$(mktemp -d)"
 echo "    Temp dir: $ROON_DIR"
-
-cleanup_upgrade() {
-    docker rm -f "$CONTAINER" 2>/dev/null || true
-    rm -rf "$ROON_DIR"
-}
-trap cleanup_upgrade EXIT
 
 # Install production first
 docker run -d --name "$CONTAINER" \
@@ -327,7 +293,6 @@ check "explicit ROON_INSTALL_BRANCH switches to EA" \
 
 docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 
-cleanup_upgrade
 trap - EXIT
 
 echo ""
