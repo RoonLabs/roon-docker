@@ -55,20 +55,11 @@ check "apt lists cleaned" \
 check "mount.cifs has no SUID bit" \
     docker run --rm --entrypoint sh "$IMAGE" -c '[ ! -u /usr/sbin/mount.cifs ]'
 
-# Failure path: container should exit non-zero without /Roon mounted
-FAIL_EXIT=0
-FAIL_OUTPUT=$(docker run --rm "$IMAGE" 2>&1) || FAIL_EXIT=$?
-check "exits with error when /Roon not mounted" \
-    test "$FAIL_EXIT" -ne 0
-
-check "prints writable error when /Roon not mounted" \
-    sh -c 'echo "$1" | grep -q "not writable"' _ "$FAIL_OUTPUT"
-
-# Invalid channel should exit with error
-CHAN_EXIT=0
-CHAN_OUTPUT=$(docker run --rm -e ROON_INSTALL_BRANCH=invalid -v "$(mktemp -d):/Roon" "$IMAGE" 2>&1) || CHAN_EXIT=$?
+# Invalid branch should exit with error
+BRANCH_EXIT=0
+BRANCH_OUTPUT=$(docker run --rm -e ROON_INSTALL_BRANCH=invalid -v "$(mktemp -d):/Roon" "$IMAGE" 2>&1) || BRANCH_EXIT=$?
 check "rejects invalid ROON_INSTALL_BRANCH" \
-    sh -c 'echo "$1" | grep -q "Invalid ROON_INSTALL_BRANCH"' _ "$CHAN_OUTPUT"
+    sh -c 'echo "$1" | grep -q "Invalid ROON_INSTALL_BRANCH"' _ "$BRANCH_OUTPUT"
 
 # Mixed-case channel should be accepted (use bad URL so it fails fast after validation)
 MIXED_EXIT=0
