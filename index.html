@@ -133,18 +133,18 @@
           <p class="text-xs text-surface-300 mt-3" id="platform-hint" aria-live="polite">Paths set to standard Linux conventions.</p>
         </section>
 
-        <!-- Release Channel -->
+        <!-- Release Branch -->
         <section class="bg-surface-800/60 border border-surface-500/40 rounded-xl p-5 backdrop-blur-sm">
-          <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-200 mb-3">Roon Server Release Channel</h3>
+          <h3 class="text-xs font-semibold uppercase tracking-wider text-slate-200 mb-3">Roon Server Release Branch</h3>
           <div>
-            <label class="block text-xs text-surface-300 mb-1.5" for="channel-select">Which release channel to install on first start</label>
-            <select id="channel-select"
+            <label class="block text-xs text-surface-300 mb-1.5" for="branch-select">Which release branch to install on first start</label>
+            <select id="branch-select"
                     class="w-full px-3 py-2 bg-surface-700 border border-surface-500/50 rounded-lg text-sm text-slate-200 focus:border-roon-400 focus:ring-1 focus:ring-roon-400 transition-colors duration-200 outline-none appearance-none"
                     style="background-image:url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M3%204.5l3%203%203-3%22%2F%3E%3C%2Fsvg%3E');background-repeat:no-repeat;background-position:right 12px center;padding-right:36px">
               <option value="production" selected>Production</option>
               <option value="earlyaccess">Early Access</option>
             </select>
-            <p class="text-xs text-surface-300 mt-1.5" id="channel-hint"></p>
+            <p class="text-xs text-surface-300 mt-1.5" id="branch-hint"></p>
           </div>
         </section>
 
@@ -416,7 +416,7 @@
 
     return {
       image: 'ghcr.io/roonlabs/roonserver:latest',
-      channel: getVal('channel-select') || 'production',
+      branch: getVal('branch-select') || 'production',
       volRoon: getVal('vol-roon') || '/Roon',
       volMusic: getVal('vol-music') || '/music',
       volBackup: getVal('vol-backup') || '/RoonBackup',
@@ -440,7 +440,7 @@
     lines.push('    network_mode: host');
 
     var envVars = [];
-    if (cfg.channel === 'earlyaccess') envVars.push('ROON_INSTALL_BRANCH=earlyaccess');
+    if (cfg.branch === 'earlyaccess') envVars.push('ROON_INSTALL_BRANCH=earlyaccess');
     if (cfg.tz) envVars.push('TZ=' + cfg.tzValue);
     if (envVars.length) {
       lines.push('    environment:');
@@ -495,7 +495,7 @@
     parts.push('  --name roonserver \\');
     parts.push('  --network host \\');
 
-    if (cfg.channel === 'earlyaccess') {
+    if (cfg.branch === 'earlyaccess') {
       parts.push('  -e ROON_INSTALL_BRANCH=earlyaccess \\');
     }
     if (cfg.tz) {
@@ -909,8 +909,8 @@
 
   document.getElementById('tz-value').addEventListener('change', generate);
 
-  document.getElementById('channel-select').addEventListener('change', function() {
-    var hint = document.getElementById('channel-hint');
+  document.getElementById('branch-select').addEventListener('change', function() {
+    var hint = document.getElementById('branch-hint');
     hint.textContent = this.value === 'earlyaccess' ? 'Early access to new features and updates.' : '';
     generate();
   });

@@ -61,13 +61,13 @@ BRANCH_OUTPUT=$(docker run --rm -e ROON_INSTALL_BRANCH=invalid -v "$(mktemp -d):
 check "rejects invalid ROON_INSTALL_BRANCH" \
     sh -c 'echo "$1" | grep -q "Invalid ROON_INSTALL_BRANCH"' _ "$BRANCH_OUTPUT"
 
-# Mixed-case channel should be accepted (use bad URL so it fails fast after validation)
+# Mixed-case branch should be accepted (use bad URL so it fails fast after validation)
 MIXED_EXIT=0
 MIXED_OUTPUT=$(docker run --rm -e ROON_INSTALL_BRANCH=EarlyAccess -e ROON_DOWNLOAD_URL=http://localhost:1 -v "$(mktemp -d):/Roon" "$IMAGE" 2>&1) || MIXED_EXIT=$?
 check "accepts mixed-case ROON_INSTALL_BRANCH" \
     sh -c '! echo "$1" | grep -q "Invalid ROON_INSTALL_BRANCH"' _ "$MIXED_OUTPUT"
 
-# Empty channel should default to production (use bad URL so it fails fast after validation)
+# Empty branch should default to production (use bad URL so it fails fast after validation)
 EMPTY_EXIT=0
 EMPTY_OUTPUT=$(docker run --rm -e ROON_INSTALL_BRANCH= -e ROON_DOWNLOAD_URL=http://localhost:1 -v "$(mktemp -d):/Roon" "$IMAGE" 2>&1) || EMPTY_EXIT=$?
 check "empty ROON_INSTALL_BRANCH defaults to production" \

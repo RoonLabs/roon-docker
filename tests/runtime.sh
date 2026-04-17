@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Starts the container and validates the download/install/startup flow.
-# Tests production install, EA install, and channel switching.
-# Downloads ~200MB per channel from download.roonlabs.net.
+# Tests production install, EA install, and branch switching.
+# Downloads ~200MB per branch from download.roonlabs.net.
 set -euo pipefail
 
 IMAGE="${1:?Usage: runtime.sh <image:tag>}"
@@ -31,7 +31,7 @@ wait_for_install() {
     done
 }
 
-# ─── Production channel ────────────────────────────────────────
+# ─── Production branch ────────────────────────────────────────
 
 echo "=== Runtime tests (production): $IMAGE ==="
 
@@ -73,8 +73,8 @@ docker logs "$CONTAINER" > "$ROON_DIR/container.log" 2>&1 || true
 check "logs contain image version" \
     grep -q "^Image:" "$ROON_DIR/container.log"
 
-check "logs contain channel" \
-    grep -q "^Channel: production" "$ROON_DIR/container.log"
+check "logs contain branch" \
+    grep -q "^Branch: production" "$ROON_DIR/container.log"
 
 check "logs contain roon version" \
     grep -q "^Roon:" "$ROON_DIR/container.log"
@@ -115,17 +115,17 @@ check "fresh EA: VERSION last line is earlyaccess" \
 sleep 3
 docker logs "$CONTAINER" > "$ROON_DIR/ea-fresh.log" 2>&1 || true
 
-check "fresh EA: logs show earlyaccess channel" \
-    grep -q "^Channel: earlyaccess" "$ROON_DIR/ea-fresh.log"
+check "fresh EA: logs show earlyaccess branch" \
+    grep -q "^Branch: earlyaccess" "$ROON_DIR/ea-fresh.log"
 
 docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 
 trap - EXIT
 
-# ─── Channel switch: production → earlyaccess ─────────────────
+# ─── Branch switch: production → earlyaccess ─────────────────
 
 echo ""
-echo "=== Runtime tests (channel switch → earlyaccess): $IMAGE ==="
+echo "=== Runtime tests (branch switch → earlyaccess): $IMAGE ==="
 
 CONTAINER="roon-runtime-switch"
 ROON_DIR="$(mktemp -d)"
@@ -151,7 +151,7 @@ docker run -d --name "$CONTAINER" \
     -e ROON_INSTALL_BRANCH=earlyaccess \
     "$IMAGE"
 
-echo "    Waiting for channel switch..."
+echo "    Waiting for branch switch..."
 TIMEOUT=180
 ELAPSED=0
 while ! tail -1 "$ROON_DIR/app/RoonServer/VERSION" 2>/dev/null | grep -q "earlyaccess" && [ "$ELAPSED" -lt "$TIMEOUT" ]; do
@@ -169,8 +169,8 @@ check "logs show branch change detected" \
 check "VERSION last line is earlyaccess" \
     sh -c '[ "$(tail -1 "$1")" = "earlyaccess" ]' _ "$ROON_DIR/app/RoonServer/VERSION"
 
-check "logs show earlyaccess channel" \
-    grep -q "^Channel: earlyaccess" "$ROON_DIR/switch.log"
+check "logs show earlyaccess branch" \
+    grep -q "^Branch: earlyaccess" "$ROON_DIR/switch.log"
 
 # EA version may differ from production
 EA_VERSION=$(sed -n '2p' "$ROON_DIR/app/RoonServer/VERSION" 2>/dev/null || echo "")
@@ -214,8 +214,8 @@ docker logs "$CONTAINER" > "$ROON_DIR/restart.log" 2>&1 || true
 check "restart does not re-download" \
     sh -c '! grep -q "downloading" "$1"' _ "$ROON_DIR/restart.log"
 
-check "restart logs channel" \
-    grep -q "^Channel: production" "$ROON_DIR/restart.log"
+check "restart logs branch" \
+    grep -q "^Branch: production" "$ROON_DIR/restart.log"
 
 docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 docker rm -f "$CONTAINER" 2>/dev/null || true
@@ -237,10 +237,10 @@ docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 
 trap - EXIT
 
-# ─── Pre-channel upgrade: VERSION exists, user requests EA ─────
+# ─── Pre-branch upgrade: VERSION exists, user requests EA ─────
 
 echo ""
-echo "=== Runtime tests (pre-channel upgrade): $IMAGE ==="
+echo "=== Runtime tests (pre-branch upgrade): $IMAGE ==="
 
 CONTAINER="roon-runtime-upgrade"
 ROON_DIR="$(mktemp -d)"
@@ -268,7 +268,7 @@ check "unset ROON_INSTALL_BRANCH keeps existing install" \
     sh -c '! grep -q "downloading" "$1"' _ "$ROON_DIR/upgrade.log"
 
 check "unset ROON_INSTALL_BRANCH logs production" \
-    grep -q "^Channel: production" "$ROON_DIR/upgrade.log"
+    grep -q "^Branch: production" "$ROON_DIR/upgrade.log"
 
 docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 docker rm -f "$CONTAINER" 2>/dev/null || true
