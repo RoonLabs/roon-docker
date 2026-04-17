@@ -14,63 +14,58 @@ Use the **[Docker Setup Guide](https://roonlabs.github.io/roon-docker/)** to gen
 
 On first start, the container downloads and installs RoonServer automatically. Subsequent starts skip the download and launch immediately.
 
+Setting the environment variable `ROON_DOWNLOAD_URL` will allow you to specify a custom RoonServer download URL, which can be useful if you have a local mirror of a RoonServer install tarball. By default, the image uses the official RoonServer download URL from Roon Labs. Example: `-e ROON_DOWNLOAD_URL=https://my-mirror.local/roonserver.tar.gz`.
+
+
 ## Requirements
 
-- **Linux host** (amd64 / x86_64) — NAS devices (Synology, QNAP, Unraid, TrueNAS) work well
+- **Linux host** (amd64 / x86_64). Common NAS solutions (Unraid, TrueNAS, Synology, QNAP) often fall into this category, but check with your NAS's technical information to confirm.
 - **Host networking** (`--net=host`) — required for Roon's multicast device discovery
 - **Restart policy** (`--restart unless-stopped`) — ensures the container restarts after unexpected exits
 
-Docker Desktop for macOS and Windows does not support multicast and will not work for production use.
+Docker for macOS and Windows will not work.
 
 ## Networking
 
-Roon requires host networking (`--net=host`) for multicast device discovery. Bridge networking will not work. No port mapping (`-p`) is needed.
+Host networking (`--net=host`) is required. `bridge` networking faces significant limitations for discovery outside the host. No port mapping (`-p`) is needed.
 
 ## Timezone
 
-Set the `TZ` environment variable to your [timezone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones). This ensures correct timestamps in Roon logs, last.fm scrobbles, and backup schedules.
-
-## Environment Variables
-
-| Variable | Default | Purpose |
-|----------|---------|---------|
-| `TZ` | `UTC` | Timezone for logs and schedules |
-| `ROON_INSTALL_BRANCH` | `production` | Release channel: `production` or `earlyaccess` |
-| `ROON_DOWNLOAD_URL` | *(from Roon servers)* | Override the RoonServer download URL |
+Set the `TZ` environment variable to your [timezone](https://en.wikipedia.org/wiki/List_of_tz_database_time_zones). This ensures correct timestamps in Roon logs, last.fm scrobbles, and backup schedules. For example, `-e TZ=America/New_York` or `-e TZ=Europe/London`. The default is `UTC`.
 
 ## Volumes
 
 | Mount | Purpose |
 |-------|---------|
 | `/Roon` | RoonServer state — database, settings, identity, and application binaries. Must be writable and persistent. |
+| `/Music` | Your music library, think of this like your user's Music folder Linux, macOS, or Windows -- it's the "default music folder" |
 | `/RoonBackup` | Roon backup destination (optional). Configure in Settings > Backups. |
-| `/music` | Your music library (read-only) |
 
-**The `/Roon` volume is critical.** If this volume is lost:
+**The `/Roon` volume is critical.** If this volume is not mounted:
 
-- Your Roon data and settings are lost unless they can be restored from a Roon backup
-- The server will appear as a new machine and must be re-authorized from a Roon remote
+- Your Roon data and settings will not persist across container restarts
+- Your Roon install must be re-authorized on each start
 
-We recommend using Roon's built-in backup feature (Settings > Backups) pointed at `/RoonBackup`.
+If your music lives in one subdirectory on your host, mount it directly using `-v /path/to/music:/Music`. If your music is spread across multiple locations on your host, mount each location under `/Music`. For example: `-v /mnt/usb1:/Music/first -v /mnt/usb2:/Music/second`.
+
+To use Roon's database backup feature, mount a volume at `/RoonBackup` and point Roon's backup location to that directory. Example: `-v /mnt/usb1/backups:/RoonBackup` and then enable backups via Settings > Backups in Roon.
 
 ## Updating
 
-When an update is available, RoonServer will download and install it automatically. A restart is required to apply the update, which can be triggered from a Roon remote. The Docker image plays no role in the update process.
+All RoonServer state and binaries are persisted to the `/Roon` volume. Recreating the container (`docker rm` + `docker run`) does not trigger a re-download if you mount in the same folder to the `/Roon` volume.
 
-All RoonServer state and binaries are persisted to the `/Roon` volume. Recreating the container (`docker rm` + `docker run`) does not trigger a re-download.
+## Release Branch
 
-## Release Channel
+RoonServer has two release branches:
 
-RoonServer has two release channels:
-
-| Channel | `ROON_INSTALL_BRANCH` | Community |
+| Branch | `ROON_INSTALL_BRANCH` | Community |
 |---------|----------------|-----------|
 | **Production** | `production` (default) | [Roon](https://community.roonlabs.com/c/roon/8) |
 | **Early Access** | `earlyaccess` | [Early Access](https://community.roonlabs.com/c/early-access/120) |
 
-Set `ROON_INSTALL_BRANCH` to change the channel. The channel determines which version of RoonServer is downloaded on first start, and Roon's self-updater continues on the same channel automatically.
+Set the `ROON_INSTALL_BRANCH` environment variable to change the branch. The branch determines which version of RoonServer is downloaded on first start, and Roon's self-updater continues on the same branch automatically.
 
-Changing channels on an existing install is safe — the container removes the old binaries and downloads from the new channel. Your data, settings, and identity are preserved.
+Warning: Early Access builds may include database changes incompatible with Production, usually noted in the release notes. Please create a fresh backup before switching branches. Be especially careful if switching from Early Access to Production, as the Production branch may not be able to read an Early Access database.
 
 ## Troubleshooting
 
@@ -78,11 +73,12 @@ Changing channels on an existing install is safe — the container removes the o
 
 **Remotes can't find the server** — verify `--net=host` is set. Bridge networking doesn't support multicast discovery.
 
-**High CPU after first start** — background audio analysis runs after importing a library. Adjust speed in Settings > Library.
+**High CPU after first start** — background audio analysis runs after importing a library, it will stop after it's done, and it might take a while if you have a large library.
 
-**First start is slow** — RoonServer (~200MB) is downloaded on first run. Subsequent starts are instant.
+**First start is slow** — RoonServer is downloaded on first run. Subsequent starts should be quick, if you use the same `/Roon` volume.
 
-**Logs** — `docker logs roonserver` or inside the volume at `/Roon/database/RoonServer/Logs/`.
+**Logs** — `docker logs roonserver` will give you the output of the RoonServer
+process on the console. It will not give you RoonServer logs. Those are located on the mounted volume at `/Roon/database/RoonServer/Logs/`.
 
 ## License
 

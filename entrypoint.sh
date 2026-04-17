@@ -75,5 +75,10 @@ echo "Image:   $(cat /etc/roon-image-version 2>/dev/null || echo 'unknown')"
 echo "Channel: $ROON_INSTALL_BRANCH"
 echo "Roon:    $(sed -n '2p' "$VERSION_FILE" 2>/dev/null || echo 'unknown')"
 
+ROON_DEFAULT_MUSIC_FOLDER_WATCH_PATH=/Music
+export ROON_DEFAULT_MUSIC_FOLDER_WATCH_PATH
+HOME=/
+export HOME
+
 # start.sh handles restarts internally without a full container restart
 exec "${ROON_APP_DIR}/RoonServer/start.sh"
