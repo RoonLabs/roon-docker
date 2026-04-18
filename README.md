@@ -54,6 +54,18 @@ To use Roon's database backup feature, mount a volume at `/RoonBackups` and poin
 
 All RoonServer state and binaries are persisted to the `/Roon` volume. Recreating the container (`docker rm` + `docker run`) does not trigger a re-download if you mount in the same folder to the `/Roon` volume.
 
+### Automatic updates via Watchtower
+
+The configuration generator enables [Watchtower](https://github.com/nicholas-fedor/watchtower) by default — a small sidecar that polls the registry daily and recreates the RoonServer container when a newer image is published. It is scoped via the `com.centurylinklabs.watchtower.enable=true` label so only RoonServer is managed; other containers on the host are left alone.
+
+If you prefer manual updates, disable the toggle in the generator or remove the `watchtower` service and label from your compose file. You can then update on demand with:
+
+```
+docker pull ghcr.io/roonlabs/roonserver:latest
+docker rm -f roonserver
+# re-run your docker run command or: docker compose up -d
+```
+
 ## Release Branch
 
 RoonServer has two release branches:

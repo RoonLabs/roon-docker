@@ -233,6 +233,23 @@
               </div>
             </div>
 
+            <!-- Auto-updates -->
+            <div class="py-3 border-b border-surface-500/30">
+              <div class="flex items-start gap-3">
+                <label class="relative inline-flex items-center cursor-pointer mt-0.5 flex-shrink-0">
+                  <input type="checkbox" id="opt-watchtower" class="sr-only peer" checked>
+                  <div class="toggle-track"></div>
+                </label>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <label class="text-sm font-medium text-white cursor-pointer" for="opt-watchtower">Auto-update via Watchtower</label>
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/20">Recommended</span>
+                  </div>
+                  <p class="text-xs text-surface-300 mt-0.5">Adds a Watchtower container that checks daily for image updates. Scoped via label so only RoonServer is managed.</p>
+                </div>
+              </div>
+            </div>
+
             <!-- CIFS -->
             <div class="py-3 border-b border-surface-500/30">
               <div class="flex items-start gap-3">
@@ -461,6 +478,7 @@
       tz: isChecked('opt-tz'),
       tzValue: getVal('tz-value'),
       logging: isChecked('opt-logging'),
+      watchtower: isChecked('opt-watchtower'),
       cifs: isChecked('opt-cifs'),
       usbAudio: isChecked('opt-usb-audio'),
       hdmiAudio: isChecked('opt-hdmi-audio'),
@@ -523,6 +541,19 @@
       lines.push('      driver: local');
     }
 
+    if (cfg.watchtower) {
+      lines.push('    labels:');
+      lines.push('      - com.centurylinklabs.watchtower.enable=true');
+      lines.push('');
+      lines.push('  watchtower:');
+      lines.push('    image: nickfedor/watchtower:latest');
+      lines.push('    container_name: watchtower');
+      lines.push('    restart: unless-stopped');
+      lines.push('    volumes:');
+      lines.push('      - /var/run/docker.sock:/var/run/docker.sock');
+      lines.push('    command: --label-enable --cleanup');
+    }
+
     return lines;
   }
 
@@ -571,8 +602,18 @@
       parts.push('  --group-add audio \\');
     }
 
-    // Image as final line (no trailing backslash)
-    parts.push('  ' + cfg.image);
+    if (cfg.watchtower) {
+      parts.push('  --label com.centurylinklabs.watchtower.enable=true \\');
+      parts.push('  ' + cfg.image + ' && \\');
+      parts.push('docker run -d \\');
+      parts.push('  --name watchtower \\');
+      parts.push('  --restart unless-stopped \\');
+      parts.push('  -v /var/run/docker.sock:/var/run/docker.sock \\');
+      parts.push('  nickfedor/watchtower:latest \\');
+      parts.push('  --label-enable --cleanup');
+    } else {
+      parts.push('  ' + cfg.image);
+    }
 
     return parts;
   }
@@ -964,7 +1005,7 @@
     generate();
   });
 
-  ['opt-tz', 'opt-logging', 'opt-cifs', 'opt-usb-audio', 'opt-hdmi-audio'].forEach(function(id) {
+  ['opt-tz', 'opt-logging', 'opt-watchtower', 'opt-cifs', 'opt-usb-audio', 'opt-hdmi-audio'].forEach(function(id) {
     document.getElementById(id).addEventListener('change', generate);
   });
 
