@@ -4,11 +4,13 @@ on:
   workflow_dispatch:
   push:
     branches: [main]
-    tags: ['v*']
+    tags: ['v*', 'updater-v*']
     paths:
       - 'Dockerfile'
       - 'entrypoint.sh'
       - 'tests/**'
+      - 'roon-docker-updater/**'
+      - '.github/workflows/build.yml'
 
 permissions:
   contents: read
@@ -17,6 +19,7 @@ permissions:
 env:
   REGISTRY: ghcr.io
   IMAGE_NAME: roonlabs/roonserver
+  UPDATER_IMAGE_NAME: roonlabs/roon-docker-updater
 
 jobs:
   build:
@@ -70,9 +73,83 @@ jobs:
           path: /tmp/roonserver.tar
           retention-days: 1
 
+  build-updater:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      - name: Generate tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.UPDATER_IMAGE_NAME }}
+          tags: |
+            type=match,pattern=updater-v(.*),group=1
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/updater-v') && !contains(github.ref, '-') }}
+
+      - name: Build updater image
+        uses: docker/build-push-action@v6
+        with:
+          context: roon-docker-updater
+          load: true
+          tags: roon-docker-updater:test
+          provenance: false
+          cache-from: type=gha,scope=updater
+          cache-to: type=gha,mode=max,scope=updater
+
+      - name: Save tested updater image
+        if: startsWith(github.ref, 'refs/tags/updater-v')
+        run: docker save roon-docker-updater:test -o /tmp/roon-docker-updater.tar
+
+      - name: Upload tested updater image
+        if: startsWith(github.ref, 'refs/tags/updater-v')
+        uses: actions/upload-artifact@v4
+        with:
+          name: roon-docker-updater-image
+          path: /tmp/roon-docker-updater.tar
+          retention-days: 1
+
+  integration:
+    needs: [build, build-updater]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: docker/setup-buildx-action@v3
+
+      # The build/build-updater jobs produce images only loaded on their
+      # own runners. Rebuild locally here (cached via gha) so this job has
+      # both images available to the test harness.
+      - name: Rebuild roonserver for integration
+        uses: docker/build-push-action@v6
+        with:
+          context: .
+          load: true
+          tags: rdu-test-roonserver:latest
+          provenance: false
+          cache-from: type=gha
+
+      - name: Rebuild updater for integration
+        uses: docker/build-push-action@v6
+        with:
+          context: roon-docker-updater
+          load: true
+          tags: rdu-test-updater:latest
+          provenance: false
+          cache-from: type=gha,scope=updater
+
+      - name: Run updater integration test
+        run: ./tests/updater.sh
+        env:
+          # Keep the first-boot /Roon download in cache across the two
+          # invocation modes within this run.
+          KEEP_ROON: '1'
+
   publish:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: build
+    needs: [build, integration]
     runs-on: ubuntu-latest
     steps:
       - name: Download tested image
@@ -105,6 +182,46 @@ jobs:
         run: |
           for tag in $IMAGE_TAGS; do
             docker tag roonserver:test "$tag"
+          done
+          for tag in $IMAGE_TAGS; do
+            docker push "$tag"
+          done
+
+  publish-updater:
+    if: startsWith(github.ref, 'refs/tags/updater-v')
+    needs: [build-updater, integration]
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download tested updater image
+        uses: actions/download-artifact@v4
+        with:
+          name: roon-docker-updater-image
+          path: /tmp
+
+      - name: Load tested updater image
+        run: docker load -i /tmp/roon-docker-updater.tar
+
+      - name: Generate tags
+        id: meta
+        uses: docker/metadata-action@v5
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.UPDATER_IMAGE_NAME }}
+          tags: |
+            type=match,pattern=updater-v(.*),group=1
+            type=raw,value=latest,enable=${{ !contains(github.ref, '-') }}
+
+      - uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Tag and push
+        env:
+          IMAGE_TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          for tag in $IMAGE_TAGS; do
+            docker tag roon-docker-updater:test "$tag"
           done
           for tag in $IMAGE_TAGS; do
             docker push "$tag"

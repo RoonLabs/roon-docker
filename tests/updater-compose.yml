@@ -1,0 +1,29 @@
+name: rdu-test
+
+# Test fixture mirroring what the generator emits when "Enable roon-docker-updater"
+# is checked, with test-specific image tags and bridge networking so the test
+# won't collide with a production RoonServer on --network host.
+
+services:
+  roonserver:
+    image: ${TEST_ROON_IMAGE:-roon-docker-test-roonserver:latest}
+    container_name: rdu-test-roonserver
+    volumes:
+      - roonstate:/Roon
+      - roon-docker-update-state:/roon-docker-update-state
+    restart: unless-stopped
+
+  roon-docker-updater:
+    image: ${TEST_UPDATER_IMAGE:-roon-docker-updater-test:latest}
+    container_name: rdu-test-updater
+    environment:
+      - WATCH_CONTAINER=rdu-test-roonserver
+      - POLL_INTERVAL=15
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+      - roon-docker-update-state:/roon-docker-update-state
+    restart: unless-stopped
+
+volumes:
+  roonstate:
+  roon-docker-update-state:

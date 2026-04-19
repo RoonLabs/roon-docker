@@ -54,11 +54,24 @@ To use Roon's database backup feature, mount a volume at `/RoonBackups` and poin
 
 All RoonServer state and binaries are persisted to the `/Roon` volume. Recreating the container (`docker rm` + `docker run`) does not trigger a re-download if you mount in the same folder to the `/Roon` volume.
 
-### Automatic updates via Watchtower
+### Automatic updates via roon-docker-updater
 
-The configuration generator enables [Watchtower](https://github.com/nicholas-fedor/watchtower) by default — a small sidecar that polls the registry daily and recreates the RoonServer container when a newer image is published. It is scoped via the `com.centurylinklabs.watchtower.enable=true` label so only RoonServer is managed; other containers on the host are left alone.
+The configuration generator enables **roon-docker-updater** by default — a small sidecar container that detects when a newer RoonServer image is published. Unlike general-purpose auto-updaters such as Watchtower, it does **not** recreate the container on its own schedule; instead it exposes "update available" to Roon, and **Roon decides when to download the image and when to apply the restart**. This means an image update cannot interrupt playback — the sidecar only *detects*; Roon *acts*, at a moment it knows is safe.
 
-If you prefer manual updates, disable the toggle in the generator or remove the `watchtower` service and label from your compose file. You can then update on demand with:
+The sidecar mounts the Docker socket in order to recreate the container, but it is a purpose-built audited script (~150 lines of bash, no network listeners, no third-party code paths), so the privileged container's attack surface is minimal and reviewable. It is scoped via `WATCH_CONTAINER=roonserver` so only the RoonServer container is managed; other containers on the host are left alone.
+
+The two containers communicate over a named volume `roon-docker-update-state` using four files:
+
+| File | Direction | Meaning |
+| --- | --- | --- |
+| `update-available` | updater &rarr; Roon | A newer image digest is available at the registry. |
+| `ready-to-pull` | Roon &rarr; updater | Roon is OK with downloading the image now. |
+| `update-pulled` | updater &rarr; Roon | The new image is locally available. |
+| `ready-to-restart` | Roon &rarr; updater | Roon is OK with recreating the container now. |
+
+The updater polls the registry once per hour by default (`POLL_INTERVAL=3600`). Detection uses Docker's `/distribution/<image>/json` endpoint, which queries the registry manifest **without downloading any image layers** — so detection alone cannot cause a later unrelated `docker compose up` on the host to silently install the new version.
+
+If you prefer manual updates, uncheck the updater option in the generator; the generated commands will omit the sidecar entirely. You can then update on demand with:
 
 ```
 docker pull ghcr.io/roonlabs/roonserver:latest

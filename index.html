@@ -237,15 +237,15 @@
             <div class="py-3 border-b border-surface-500/30">
               <div class="flex items-start gap-3">
                 <label class="relative inline-flex items-center cursor-pointer mt-0.5 flex-shrink-0">
-                  <input type="checkbox" id="opt-watchtower" class="sr-only peer" checked>
+                  <input type="checkbox" id="opt-updater" class="sr-only peer" checked>
                   <div class="toggle-track"></div>
                 </label>
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2 flex-wrap">
-                    <label class="text-sm font-medium text-white cursor-pointer" for="opt-watchtower">Auto-update via Watchtower</label>
+                    <label class="text-sm font-medium text-white cursor-pointer" for="opt-updater">Enable roon-docker-updater</label>
                     <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/20">Recommended</span>
                   </div>
-                  <p class="text-xs text-surface-300 mt-0.5">Adds a Watchtower container that checks daily for image updates. Scoped via label so only RoonServer is managed.</p>
+                  <p class="text-xs text-surface-300 mt-0.5">Adds a small sidecar that detects when a newer RoonServer image is published and signals Roon. Unlike general-purpose auto-updaters, it <strong>never restarts the container on its own</strong> &mdash; Roon decides when it&rsquo;s safe to download and when it&rsquo;s safe to apply the update, so playback is never interrupted. The sidecar holds the Docker socket but runs an audited ~150-line script with no network exposure and no third-party code.</p>
                 </div>
               </div>
             </div>
@@ -478,7 +478,7 @@
       tz: isChecked('opt-tz'),
       tzValue: getVal('tz-value'),
       logging: isChecked('opt-logging'),
-      watchtower: isChecked('opt-watchtower'),
+      updater: isChecked('opt-updater'),
       cifs: isChecked('opt-cifs'),
       usbAudio: isChecked('opt-usb-audio'),
       hdmiAudio: isChecked('opt-hdmi-audio'),
@@ -512,6 +512,9 @@
     if (cfg.usbAudio) {
       lines.push('      - /run/udev:/run/udev:ro');
     }
+    if (cfg.updater) {
+      lines.push('      - roon-docker-update-state:/roon-docker-update-state');
+    }
 
     lines.push('    restart: unless-stopped');
 
@@ -541,17 +544,21 @@
       lines.push('      driver: local');
     }
 
-    if (cfg.watchtower) {
-      lines.push('    labels:');
-      lines.push('      - com.centurylinklabs.watchtower.enable=true');
+    if (cfg.updater) {
       lines.push('');
-      lines.push('  watchtower:');
-      lines.push('    image: nickfedor/watchtower:latest');
-      lines.push('    container_name: watchtower');
+      lines.push('  roon-docker-updater:');
+      lines.push('    image: ghcr.io/roonlabs/roon-docker-updater:latest');
+      lines.push('    container_name: roon-docker-updater');
       lines.push('    restart: unless-stopped');
+      lines.push('    environment:');
+      lines.push('      - WATCH_CONTAINER=roonserver');
+      lines.push('      - POLL_INTERVAL=3600');
       lines.push('    volumes:');
       lines.push('      - /var/run/docker.sock:/var/run/docker.sock');
-      lines.push('    command: --label-enable --cleanup');
+      lines.push('      - roon-docker-update-state:/roon-docker-update-state');
+      lines.push('');
+      lines.push('volumes:');
+      lines.push('  roon-docker-update-state:');
     }
 
     return lines;
@@ -559,7 +566,12 @@
 
   // --- Generate docker run command ---
   function generateRun(cfg) {
-    var parts = ['docker run -d \\'];
+    var parts = [];
+    if (cfg.updater) {
+      parts.push('docker volume create roon-docker-update-state');
+      parts.push('');
+    }
+    parts.push('docker run -d \\');
     parts.push('  --name roonserver \\');
     parts.push('  --network host \\');
 
@@ -602,17 +614,21 @@
       parts.push('  --group-add audio \\');
     }
 
-    if (cfg.watchtower) {
-      parts.push('  --label com.centurylinklabs.watchtower.enable=true \\');
-      parts.push('  ' + cfg.image + ' && \\');
+    if (cfg.updater) {
+      parts.push('  -v roon-docker-update-state:/roon-docker-update-state \\');
+    }
+    parts.push('  ' + cfg.image);
+
+    if (cfg.updater) {
+      parts.push('');
       parts.push('docker run -d \\');
-      parts.push('  --name watchtower \\');
-      parts.push('  --restart unless-stopped \\');
+      parts.push('  --name roon-docker-updater \\');
+      parts.push('  -e WATCH_CONTAINER=roonserver \\');
+      parts.push('  -e POLL_INTERVAL=3600 \\');
       parts.push('  -v /var/run/docker.sock:/var/run/docker.sock \\');
-      parts.push('  nickfedor/watchtower:latest \\');
-      parts.push('  --label-enable --cleanup');
-    } else {
-      parts.push('  ' + cfg.image);
+      parts.push('  -v roon-docker-update-state:/roon-docker-update-state \\');
+      parts.push('  --restart unless-stopped \\');
+      parts.push('  ghcr.io/roonlabs/roon-docker-updater:latest');
     }
 
     return parts;
@@ -702,6 +718,13 @@
     table.style.cssText = 'border-collapse:collapse;width:100%';
     var tbody = document.createElement('tbody');
 
+    // Output may contain multiple command blocks separated by blank lines
+    // (e.g., `docker volume create` + `docker run` + `docker run`). Each
+    // block's first line is a command; subsequent lines are flags until one
+    // that doesn't end with a backslash — that one is the block's terminal
+    // (image name or single-token arg). Blank lines reset the state machine.
+    var expectCommand = true;
+
     lines.forEach(function(line, i) {
       var tr = document.createElement('tr');
 
@@ -715,41 +738,45 @@
 
       var trimmed = line.trim();
 
-      if (i === 0) {
-        // "docker run -d \"
+      if (trimmed === '') {
+        tdCode.appendChild(document.createTextNode('\u00A0'));
+        expectCommand = true;
+      } else if (expectCommand) {
         var cmdParts = trimmed.split(/\s+/);
         var cmdSpan = document.createElement('span');
         cmdSpan.className = 'hl-cmd';
         cmdSpan.textContent = cmdParts[0];
         tdCode.appendChild(cmdSpan);
-        tdCode.appendChild(document.createTextNode(' '));
-        var subSpan = document.createElement('span');
-        subSpan.className = 'hl-key';
-        subSpan.textContent = cmdParts[1];
-        tdCode.appendChild(subSpan);
-        for (var k = 2; k < cmdParts.length; k++) {
+        for (var k = 1; k < cmdParts.length; k++) {
           tdCode.appendChild(document.createTextNode(' '));
           var fs = document.createElement('span');
-          fs.className = (cmdParts[k] === '\\') ? 'hl-punct' : 'hl-flag';
+          if (cmdParts[k] === '\\') {
+            fs.className = 'hl-punct';
+          } else if (k === 1) {
+            fs.className = 'hl-key';
+          } else {
+            fs.className = 'hl-flag';
+          }
           fs.textContent = cmdParts[k];
           tdCode.appendChild(fs);
         }
-      } else if (i === lines.length - 1) {
-        // Image name (last line)
+        // If the command line has no trailing backslash, this is a one-line
+        // command; the next non-blank line is a fresh command.
+        expectCommand = !trimmed.endsWith('\\');
+      } else if (!trimmed.endsWith('\\')) {
+        // Terminal line of a multi-line command (e.g., the image name).
         var indentImg = line.length - line.trimStart().length;
         tdCode.appendChild(document.createTextNode(line.substring(0, indentImg)));
         var imgSpan = document.createElement('span');
         imgSpan.className = 'hl-string';
         imgSpan.textContent = trimmed;
         tdCode.appendChild(imgSpan);
+        expectCommand = true;
       } else {
-        // Flag lines
         var indentFlag = line.length - line.trimStart().length;
         tdCode.appendChild(document.createTextNode(line.substring(0, indentFlag)));
 
         var withoutBackslash = trimmed.replace(/ \\$/, '');
-        var hasBackslash = trimmed.endsWith('\\');
-
         var flagMatch = withoutBackslash.match(/^(--?[\w-]+)\s*(.*)/);
         if (flagMatch) {
           var fSpan = document.createElement('span');
@@ -767,13 +794,11 @@
           tdCode.appendChild(document.createTextNode(withoutBackslash));
         }
 
-        if (hasBackslash) {
-          tdCode.appendChild(document.createTextNode(' '));
-          var bs = document.createElement('span');
-          bs.className = 'hl-punct';
-          bs.textContent = '\\';
-          tdCode.appendChild(bs);
-        }
+        tdCode.appendChild(document.createTextNode(' '));
+        var bs = document.createElement('span');
+        bs.className = 'hl-punct';
+        bs.textContent = '\\';
+        tdCode.appendChild(bs);
       }
 
       tr.appendChild(tdCode);
@@ -1005,7 +1030,7 @@
     generate();
   });
 
-  ['opt-tz', 'opt-logging', 'opt-watchtower', 'opt-cifs', 'opt-usb-audio', 'opt-hdmi-audio'].forEach(function(id) {
+  ['opt-tz', 'opt-logging', 'opt-updater', 'opt-cifs', 'opt-usb-audio', 'opt-hdmi-audio'].forEach(function(id) {
     document.getElementById(id).addEventListener('change', generate);
   });
 
