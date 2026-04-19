@@ -237,13 +237,12 @@
             <div class="py-3 border-b border-surface-500/30">
               <div class="flex items-start gap-3">
                 <label class="relative inline-flex items-center cursor-pointer mt-0.5 flex-shrink-0">
-                  <input type="checkbox" id="opt-updater" class="sr-only peer" checked>
+                  <input type="checkbox" id="opt-updater" class="sr-only peer">
                   <div class="toggle-track"></div>
                 </label>
                 <div class="flex-1 min-w-0">
                   <div class="flex items-center gap-2 flex-wrap">
                     <label class="text-sm font-medium text-white cursor-pointer" for="opt-updater">Enable roon-docker-updater</label>
-                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/20">Recommended</span>
                   </div>
                   <p class="text-xs text-surface-300 mt-0.5">Adds a small sidecar that detects when a newer RoonServer image is published and signals Roon. Unlike general-purpose auto-updaters, it <strong>never restarts the container on its own</strong> &mdash; Roon decides when it&rsquo;s safe to download and when it&rsquo;s safe to apply the update, so playback is never interrupted. The sidecar holds the Docker socket but runs an audited ~150-line script with no network exposure and no third-party code.</p>
                 </div>
