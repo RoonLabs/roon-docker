@@ -567,10 +567,6 @@
   // --- Generate docker run command ---
   function generateRun(cfg) {
     var parts = [];
-    if (cfg.updater) {
-      parts.push('docker volume create roon-docker-update-state');
-      parts.push('');
-    }
     parts.push('docker run -d \\');
     parts.push('  --name roonserver \\');
     parts.push('  --network host \\');
