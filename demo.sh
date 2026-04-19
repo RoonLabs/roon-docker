@@ -13,13 +13,13 @@
 #   KEEP_ROON=1               # preserve the test /Roon volume across runs
 set -euo pipefail
 
-TEST_ROON_IMAGE=rdu-demo-roonserver:latest
-TEST_UPDATER_IMAGE=rdu-demo-updater:latest
-PROJECT=rdu-demo
-ROON_NAME=rdu-demo-roonserver
-UPDATER_NAME=rdu-demo-updater
-STATE_VOL=rdu-demo-update-state
-ROON_VOL=rdu-demo-roonstate
+TEST_ROON_IMAGE=rdu-test-roonserver:latest
+TEST_UPDATER_IMAGE=rdu-test-updater:latest
+PROJECT=rdu-test
+ROON_NAME=rdu-test-roonserver
+UPDATER_NAME=rdu-test-updater
+STATE_VOL=rdu-test-update-state
+ROON_VOL=rdu-test-roonstate
 COMPOSE_FILE=tests/updater-compose.yml
 KEEP_ROON=${KEEP_ROON:-0}
 
