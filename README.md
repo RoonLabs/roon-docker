@@ -38,7 +38,7 @@ Set the `TZ` environment variable to your [timezone](https://en.wikipedia.org/wi
 | Mount | Purpose |
 |-------|---------|
 | `/Roon` | RoonServer state — database, settings, identity, and application binaries. Must be writable and persistent. |
-| `/Music` | Your primary music library — treat this like your user's Music folder on Linux, macOS, or Windows. It's the "default music folder."  Music that Roon imports (e.g. CD rips, downloads) lands here. |
+| `/Music` | Your primary music library — treat this like your user's Music folder on Linux, macOS, or Windows. It's the "default music folder." Music that you import into Roon with the drag-and-drop feature will land here. |
 | `/RoonBackups` | Roon backup destination (optional). Configure in Settings > Backups. |
 
 **The `/Roon` volume is critical.** If this volume is not mounted:
@@ -48,7 +48,7 @@ Set the `TZ` environment variable to your [timezone](https://en.wikipedia.org/wi
 
 > **⚠ NAS warning — host paths outside your platform's persistent prefix can silently be tmpfs.** Several NAS OSes run the host root filesystem in RAM and only expose persistent storage under a specific prefix — typically `/share/...` on QNAP, `/volume1/...` on Synology, `/mnt/user/...` on Unraid, `/mnt/<pool>/...` on TrueNAS SCALE. Binding a host path **outside** that prefix (e.g. `/opt/roon` on QNAP) will appear to work: Docker creates the missing directory, the container starts, Roon imports a library — and then a reboot wipes it because the directory only ever lived in RAM. Always mount under your platform's persistent prefix. The [setup generator](https://roonlabs.github.io/roon-docker/) flags paths that don't match the selected platform's prefix.
 
-Mount your **primary** music location directly at `/Music` (e.g. `-v /path/to/music:/Music`). Anything Roon adds to your library from within Roon — CD rips, file imports, downloads — is written here, so this should point at the folder you want to treat as your main library.
+Mount your **primary** music location directly at `/Music` (e.g. `-v /path/to/music:/Music`). This folder will be treated as the Default Music Folder (DMF) by Roon. All drag-and-drop content will be added there.
 
 If your music is spread across multiple locations on the host, mount each additional location at a named subpath under `/Music`, for example:
 
