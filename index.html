@@ -123,14 +123,14 @@
           <select id="platform-select"
                   class="w-full px-3 py-2 bg-surface-700 border border-surface-500/50 rounded-lg text-sm text-slate-200 focus:border-roon-400 focus:ring-1 focus:ring-roon-400 transition-colors duration-200 outline-none appearance-none"
                   style="background-image:url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M3%204.5l3%203%203-3%22%2F%3E%3C%2Fsvg%3E');background-repeat:no-repeat;background-position:right 12px center;padding-right:36px">
-            <option value="linux">Linux</option>
-            <option value="synology">Synology</option>
+            <option value="linux" hidden>Linux</option>
+            <option value="synology" selected>Synology</option>
             <option value="qnap">QNAP</option>
             <option value="unraid">Unraid</option>
             <option value="truenas">TrueNAS SCALE</option>
             <option value="custom">Custom</option>
           </select>
-          <p class="text-xs text-surface-300 mt-3" id="platform-hint" aria-live="polite">Paths set to standard Linux conventions.</p>
+          <p class="text-xs text-surface-300 mt-3" id="platform-hint" aria-live="polite">Paths set for Synology DSM. Adjust volume1 if needed.</p>
         </section>
 
         <!-- Release Branch -->
@@ -164,19 +164,19 @@
             <div>
               <label class="text-sm font-medium text-white" for="vol-roon">/Roon</label>
               <p class="text-xs text-surface-300 mt-0.5 mb-2" id="vol-roon-desc">Database, settings, cache, and machine identity. Must be writable and persistent.</p>
-              <input type="text" id="vol-roon" value="/opt/roon" aria-describedby="vol-roon-desc"
+              <input type="text" id="vol-roon" value="/volume1/docker/roon" aria-describedby="vol-roon-desc"
                      class="w-full px-3 py-2 bg-surface-700 border border-surface-500/50 rounded-lg text-sm font-mono text-slate-200 focus:border-roon-400 focus:ring-1 focus:ring-roon-400 transition-colors duration-200 outline-none">
             </div>
             <div class="border-t border-surface-500/30 pt-4">
               <label class="text-sm font-medium text-white" for="vol-music">/Music</label>
               <p class="text-xs text-surface-300 mt-0.5 mb-2" id="vol-music-desc">Your primary music library. Mount additional libraries at <code class="text-roon-300">/Music/&lt;name&gt;</code>.</p>
-              <input type="text" id="vol-music" value="/mnt/music" aria-describedby="vol-music-desc"
+              <input type="text" id="vol-music" value="/volume1/music" aria-describedby="vol-music-desc"
                      class="w-full px-3 py-2 bg-surface-700 border border-surface-500/50 rounded-lg text-sm font-mono text-slate-200 focus:border-roon-400 focus:ring-1 focus:ring-roon-400 transition-colors duration-200 outline-none">
             </div>
             <div class="border-t border-surface-500/30 pt-4">
               <label class="text-sm font-medium text-white" for="vol-backup">/RoonBackups</label>
               <p class="text-xs text-surface-300 mt-0.5 mb-2" id="vol-backup-desc">Roon backup destination. Configure in Settings > Backups. Optional.</p>
-              <input type="text" id="vol-backup" value="/RoonBackups" aria-describedby="vol-backup-desc"
+              <input type="text" id="vol-backup" value="/volume1/roon-backups" aria-describedby="vol-backup-desc"
                      class="w-full px-3 py-2 bg-surface-700 border border-surface-500/50 rounded-lg text-sm font-mono text-slate-200 focus:border-roon-400 focus:ring-1 focus:ring-roon-400 transition-colors duration-200 outline-none">
             </div>
 
