@@ -38,7 +38,7 @@ Set the `TZ` environment variable to your [timezone](https://en.wikipedia.org/wi
 | Mount | Purpose |
 |-------|---------|
 | `/Roon` | RoonServer state — database, settings, identity, and application binaries. Must be writable and persistent. |
-| `/Music` | Your music library, think of this like your user's Music folder Linux, macOS, or Windows -- it's the "default music folder" |
+| `/Music` | Your primary music library — treat this like your user's Music folder on Linux, macOS, or Windows. It's the "default music folder."  Music that Roon imports (e.g. CD rips, downloads) lands here. |
 | `/RoonBackups` | Roon backup destination (optional). Configure in Settings > Backups. |
 
 **The `/Roon` volume is critical.** If this volume is not mounted:
@@ -46,32 +46,31 @@ Set the `TZ` environment variable to your [timezone](https://en.wikipedia.org/wi
 - Your Roon data and settings will not persist across container restarts
 - Your Roon install must be re-authorized on each start
 
-If your music lives in one subdirectory on your host, mount it directly using `-v /path/to/music:/Music`. If your music is spread across multiple locations on your host, mount each location under `/Music`. For example: `-v /mnt/usb1:/Music/first -v /mnt/usb2:/Music/second`.
+> **⚠ NAS warning — host paths outside your platform's persistent prefix can silently be tmpfs.** Several NAS OSes run the host root filesystem in RAM and only expose persistent storage under a specific prefix — typically `/share/...` on QNAP, `/volume1/...` on Synology, `/mnt/user/...` on Unraid, `/mnt/<pool>/...` on TrueNAS SCALE. Binding a host path **outside** that prefix (e.g. `/opt/roon` on QNAP) will appear to work: Docker creates the missing directory, the container starts, Roon imports a library — and then a reboot wipes it because the directory only ever lived in RAM. Always mount under your platform's persistent prefix. The [setup generator](https://roonlabs.github.io/roon-docker/) flags paths that don't match the selected platform's prefix.
+
+Mount your **primary** music location directly at `/Music` (e.g. `-v /path/to/music:/Music`). Anything Roon adds to your library from within Roon — CD rips, file imports, downloads — is written here, so this should point at the folder you want to treat as your main library.
+
+If your music is spread across multiple locations on the host, mount each additional location at a named subpath under `/Music`, for example:
+
+```
+-v /path/to/primary-music:/Music
+-v /mnt/usb1:/Music/usb1
+-v /mnt/nas/flac:/Music/nas-flac
+```
+
+A few things to know about this layout:
+
+- Each extra mount appears as its own named subfolder inside `/Music`. The mount point (e.g. `usb1`) is created on the primary host folder at container start if it doesn't already exist — that's normally just an empty directory and harmless.
+- If the primary folder already contains a real subfolder with the same name as a mount point, the mount will hide it for as long as the container runs. Pick mount names that don't collide with existing folders in your primary library.
+- Additional mounts below `/Music` are read/write inside the container just like `/Music` itself. If you want an extra location to be read-only, append `:ro` (e.g. `-v /mnt/archive:/Music/archive:ro`).
 
 To use Roon's database backup feature, mount a volume at `/RoonBackups` and point Roon's backup location to that directory. Example: `-v /mnt/usb1/backups:/RoonBackups` and then enable backups via Settings > Backups in Roon.
 
 ## Updating
 
-All RoonServer state and binaries are persisted to the `/Roon` volume. Recreating the container (`docker rm` + `docker run`) does not trigger a re-download if you mount in the same folder to the `/Roon` volume.
+All RoonServer state and binaries are persisted to the `/Roon` volume. Recreating the container (`docker rm` + `docker run`) does not trigger a re-download if you mount the same folder to the `/Roon` volume.
 
-### Automatic updates via roon-docker-updater
-
-The configuration generator enables **roon-docker-updater** by default — a small sidecar container that detects when a newer RoonServer image is published. Unlike general-purpose auto-updaters such as Watchtower, it does **not** recreate the container on its own schedule; instead it exposes "update available" to Roon, and **Roon decides when to download the image and when to apply the restart**. This means an image update cannot interrupt playback — the sidecar only *detects*; Roon *acts*, at a moment it knows is safe.
-
-The sidecar mounts the Docker socket in order to recreate the container, but it is a purpose-built audited script (~150 lines of bash, no network listeners, no third-party code paths), so the privileged container's attack surface is minimal and reviewable. It is scoped via `WATCH_CONTAINER=roonserver` so only the RoonServer container is managed; other containers on the host are left alone.
-
-The two containers communicate over a named volume `roon-docker-update-state` using four files:
-
-| File | Direction | Meaning |
-| --- | --- | --- |
-| `update-available` | updater &rarr; Roon | A newer image digest is available at the registry. |
-| `ready-to-pull` | Roon &rarr; updater | Roon is OK with downloading the image now. |
-| `update-pulled` | updater &rarr; Roon | The new image is locally available. |
-| `ready-to-restart` | Roon &rarr; updater | Roon is OK with recreating the container now. |
-
-The updater polls the registry once per hour by default (`POLL_INTERVAL=3600`). Detection uses Docker's `/distribution/<image>/json` endpoint, which queries the registry manifest **without downloading any image layers** — so detection alone cannot cause a later unrelated `docker compose up` on the host to silently install the new version.
-
-If you prefer manual updates, uncheck the updater option in the generator; the generated commands will omit the sidecar entirely. You can then update on demand with:
+To update on demand:
 
 ```
 docker pull ghcr.io/roonlabs/roonserver:latest

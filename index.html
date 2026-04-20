@@ -169,7 +169,7 @@
             </div>
             <div class="border-t border-surface-500/30 pt-4">
               <label class="text-sm font-medium text-white" for="vol-music">/Music</label>
-              <p class="text-xs text-surface-300 mt-0.5 mb-2" id="vol-music-desc">Your music library. Can be read-only.</p>
+              <p class="text-xs text-surface-300 mt-0.5 mb-2" id="vol-music-desc">Your primary music library. Mount additional libraries at <code class="text-roon-300">/Music/&lt;name&gt;</code>.</p>
               <input type="text" id="vol-music" value="/mnt/music" aria-describedby="vol-music-desc"
                      class="w-full px-3 py-2 bg-surface-700 border border-surface-500/50 rounded-lg text-sm font-mono text-slate-200 focus:border-roon-400 focus:ring-1 focus:ring-roon-400 transition-colors duration-200 outline-none">
             </div>
@@ -229,22 +229,6 @@
                     <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/20">Recommended</span>
                   </div>
                   <p class="text-xs text-surface-300 mt-0.5">Prevents unbounded Docker log growth. Uses Docker's local log driver with automatic rotation.</p>
-                </div>
-              </div>
-            </div>
-
-            <!-- Auto-updates -->
-            <div class="py-3 border-b border-surface-500/30">
-              <div class="flex items-start gap-3">
-                <label class="relative inline-flex items-center cursor-pointer mt-0.5 flex-shrink-0">
-                  <input type="checkbox" id="opt-updater" class="sr-only peer">
-                  <div class="toggle-track"></div>
-                </label>
-                <div class="flex-1 min-w-0">
-                  <div class="flex items-center gap-2 flex-wrap">
-                    <label class="text-sm font-medium text-white cursor-pointer" for="opt-updater">Enable roon-docker-updater</label>
-                  </div>
-                  <p class="text-xs text-surface-300 mt-0.5">Adds a small sidecar that detects when a newer RoonServer image is published and signals Roon. Unlike general-purpose auto-updaters, it <strong>never restarts the container on its own</strong> &mdash; Roon decides when it&rsquo;s safe to download and when it&rsquo;s safe to apply the update, so playback is never interrupted. The sidecar holds the Docker socket but runs an audited ~150-line script with no network exposure and no third-party code.</p>
                 </div>
               </div>
             </div>
@@ -391,13 +375,55 @@
   // --- State ---
   var currentTab = 'compose';
 
+  // Platform presets for the volume inputs.
+  //   roon    — host path bound to container /Roon (app state)
+  //   music   — host path bound to container /Music (primary library)
+  //   backup  — host path bound to container /RoonBackups
+  //   prefix  — placeholder prefix for "add additional mount" host input
+  //   hint    — copy shown under the platform selector
   var platforms = {
-    linux:    { roon: '/opt/roon', music: '/mnt/music', backup: '/opt/RoonBackups', prefix: '/mnt/', hint: 'Paths set to standard Linux conventions.' },
-    synology: { roon: '/volume1/docker/roon', music: '/volume1/music', backup: '/volume1/RoonBackups', prefix: '/volume1/', hint: 'Paths set for Synology DSM. Adjust volume1 if needed.' },
-    qnap:    { roon: '/share/Roon', music: '/share/Music', backup: '/share/RoonBackups', prefix: '/share/', hint: 'Paths set for QNAP. Shared folders live under /share/.' },
-    unraid:  { roon: '/mnt/user/appdata/roon', music: '/mnt/user/Music', backup: '/mnt/user/RoonBackups', prefix: '/mnt/user/', hint: 'Paths set for Unraid. Consider /mnt/cache/ for the Roon folder.' },
-    truenas: { roon: '/mnt/tank/apps/roon', music: '/mnt/tank/media/music', backup: '/mnt/tank/backups/roon', prefix: '/mnt/tank/', hint: 'Paths set for TrueNAS SCALE. Adjust pool name if needed.' },
-    custom:  { roon: '/Roon', music: '/music', backup: '/RoonBackups', prefix: '', hint: 'Enter your own paths.' },
+    linux: {
+      roon:   '/var/lib/roon',
+      music:  '/mnt/music',
+      backup: '/var/backups/roon',
+      prefix: '/mnt/',
+      hint:   'Paths set to standard Linux conventions (FHS: /var/lib for service state, /var/backups for backups, /mnt for mounted media).',
+    },
+    synology: {
+      roon:   '/volume1/docker/roon',
+      music:  '/volume1/music',
+      backup: '/volume1/roon-backups',
+      prefix: '/volume1/',
+      hint:   'Paths set for Synology DSM. Adjust volume1 if needed.',
+    },
+    qnap: {
+      roon:   '/share/Container/roon',
+      music:  '/share/Music',
+      backup: '/share/Container/roon-backups',
+      prefix: '/share/',
+      hint:   'Paths set for QNAP. Container Station stores app data under /share/Container/.',
+    },
+    unraid: {
+      roon:   '/mnt/user/appdata/roon',
+      music:  '/mnt/user/Music',
+      backup: '/mnt/user/RoonBackups',
+      prefix: '/mnt/user/',
+      hint:   'Paths set for Unraid. Consider /mnt/cache/ for the Roon folder.',
+    },
+    truenas: {
+      roon:   '/mnt/tank/apps/roon',
+      music:  '/mnt/tank/media/music',
+      backup: '/mnt/tank/backups/roon',
+      prefix: '/mnt/tank/',
+      hint:   'Paths set for TrueNAS SCALE. Adjust pool name if needed.',
+    },
+    custom: {
+      roon:   '/path/to/roon',
+      music:  '/path/to/music',
+      backup: '/path/to/roon-backups',
+      prefix: '',
+      hint:   'Placeholder paths — replace with real host paths before running.',
+    },
   };
 
   // Per-platform validation patterns. Not every platform has a strict root, so
@@ -477,7 +503,6 @@
       tz: isChecked('opt-tz'),
       tzValue: getVal('tz-value'),
       logging: isChecked('opt-logging'),
-      updater: isChecked('opt-updater'),
       cifs: isChecked('opt-cifs'),
       usbAudio: isChecked('opt-usb-audio'),
       hdmiAudio: isChecked('opt-hdmi-audio'),
@@ -503,16 +528,13 @@
 
     lines.push('    volumes:');
     lines.push('      - ' + cfg.volRoon + ':/Roon');
-    lines.push('      - ' + cfg.volMusic + ':/Music:ro');
+    lines.push('      - ' + cfg.volMusic + ':/Music');
     lines.push('      - ' + cfg.volBackup + ':/RoonBackups');
     cfg.extraVolumes.forEach(function(v) {
       lines.push('      - ' + v.host + ':' + v.container);
     });
     if (cfg.usbAudio) {
       lines.push('      - /run/udev:/run/udev:ro');
-    }
-    if (cfg.updater) {
-      lines.push('      - roon-docker-update-state:/roon-docker-update-state');
     }
 
     lines.push('    restart: unless-stopped');
@@ -543,23 +565,6 @@
       lines.push('      driver: local');
     }
 
-    if (cfg.updater) {
-      lines.push('');
-      lines.push('  roon-docker-updater:');
-      lines.push('    image: ghcr.io/roonlabs/roon-docker-updater:latest');
-      lines.push('    container_name: roon-docker-updater');
-      lines.push('    restart: unless-stopped');
-      lines.push('    environment:');
-      lines.push('      - WATCH_CONTAINER=roonserver');
-      lines.push('      - POLL_INTERVAL=3600');
-      lines.push('    volumes:');
-      lines.push('      - /var/run/docker.sock:/var/run/docker.sock');
-      lines.push('      - roon-docker-update-state:/roon-docker-update-state');
-      lines.push('');
-      lines.push('volumes:');
-      lines.push('  roon-docker-update-state:');
-    }
-
     return lines;
   }
 
@@ -578,7 +583,7 @@
     }
 
     parts.push('  -v ' + cfg.volRoon + ':/Roon \\');
-    parts.push('  -v ' + cfg.volMusic + ':/Music:ro \\');
+    parts.push('  -v ' + cfg.volMusic + ':/Music \\');
     parts.push('  -v ' + cfg.volBackup + ':/RoonBackups \\');
     cfg.extraVolumes.forEach(function(v) {
       parts.push('  -v ' + v.host + ':' + v.container + ' \\');
@@ -609,22 +614,7 @@
       parts.push('  --group-add audio \\');
     }
 
-    if (cfg.updater) {
-      parts.push('  -v roon-docker-update-state:/roon-docker-update-state \\');
-    }
     parts.push('  ' + cfg.image);
-
-    if (cfg.updater) {
-      parts.push('');
-      parts.push('docker run -d \\');
-      parts.push('  --name roon-docker-updater \\');
-      parts.push('  -e WATCH_CONTAINER=roonserver \\');
-      parts.push('  -e POLL_INTERVAL=3600 \\');
-      parts.push('  -v /var/run/docker.sock:/var/run/docker.sock \\');
-      parts.push('  -v roon-docker-update-state:/roon-docker-update-state \\');
-      parts.push('  --restart unless-stopped \\');
-      parts.push('  ghcr.io/roonlabs/roon-docker-updater:latest');
-    }
 
     return parts;
   }
@@ -1025,7 +1015,7 @@
     generate();
   });
 
-  ['opt-tz', 'opt-logging', 'opt-updater', 'opt-cifs', 'opt-usb-audio', 'opt-hdmi-audio'].forEach(function(id) {
+  ['opt-tz', 'opt-logging', 'opt-cifs', 'opt-usb-audio', 'opt-hdmi-audio'].forEach(function(id) {
     document.getElementById(id).addEventListener('change', generate);
   });
 
