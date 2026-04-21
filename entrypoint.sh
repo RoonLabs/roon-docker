@@ -70,17 +70,6 @@ if [ "$NEEDS_INSTALL" = true ]; then
     echo "RoonServer installed successfully."
 fi
 
-# libharfbuzz.so links against libfreetype.so.6 but the bundled lib has no
-# soname suffix. Prefer a symlink; fall back to a copy on host filesystems
-# that reject symlinks on the /Roon bind mount (e.g. CIFS without mfsymlinks).
-# Runs on every start so existing volumes from images that omitted the alias,
-# and any self-update that replaces Appliance/, still get a working alias.
-FREETYPE_SRC="${ROON_APP_DIR}/RoonServer/Appliance/libfreetype.so"
-FREETYPE_DST="${ROON_APP_DIR}/RoonServer/Appliance/libfreetype.so.6"
-if [ -f "$FREETYPE_SRC" ] && [ ! -e "$FREETYPE_DST" ]; then
-    ln -s "$FREETYPE_SRC" "$FREETYPE_DST" 2>/dev/null || cp "$FREETYPE_SRC" "$FREETYPE_DST"
-fi
-
 # Log versions at startup
 echo "Image:   $(cat /etc/roon-image-version 2>/dev/null || echo 'unknown')"
 echo "Branch: $ROON_INSTALL_BRANCH"
