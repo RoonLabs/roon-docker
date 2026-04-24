@@ -4,11 +4,42 @@
 # behavior (unset env keeps installed branch), and restart skipping.
 #
 # Downloads ~200MB per branch from download.roonlabs.net.
+#
+# Platform-aware tmpdir selection:
+#
+# Linux (CI):  `mktemp -d` → /tmp/... — shared with containers natively.
+#
+# macOS:       BSD `mktemp -d` hardcodes /var/folders/... and ignores
+#              TMPDIR. Docker Desktop's default file-sharing list doesn't
+#              include /var/folders, so bind mounts of those tmpdirs
+#              appear empty inside containers and the tests time out on
+#              files that never reach the host. Default tmp root to
+#              $HOME/.cache/roon-test-tmp, which Docker Desktop shares
+#              under the $HOME entry — works out of the box.
+#
+# Override:    Set ROON_TEST_TMP_ROOT explicitly to force any base path
+#              (e.g. to opt out of the macOS default, or point somewhere
+#              on a specific volume).
 set -euo pipefail
 
 IMAGE="${1:?Usage: runtime.sh <image:tag>}"
 PASS=0
 FAIL=0
+
+if [ -z "${ROON_TEST_TMP_ROOT:-}" ] && [ "$(uname -s)" = "Darwin" ]; then
+    ROON_TEST_TMP_ROOT="$HOME/.cache/roon-test-tmp"
+fi
+
+# Wrapper around `mktemp -d` that honors ROON_TEST_TMP_ROOT when set.
+# See header comment for why macOS/Docker Desktop needs this override.
+mktemp_roon_dir() {
+    if [ -n "${ROON_TEST_TMP_ROOT:-}" ]; then
+        mkdir -p "$ROON_TEST_TMP_ROOT"
+        mktemp -d "$ROON_TEST_TMP_ROOT/roon-runtime.XXXXXX"
+    else
+        mktemp -d
+    fi
+}
 
 # Track containers + tempdirs so the EXIT trap cleans them up even if a
 # test errors out mid-run. Previous revisions had `trap - EXIT` calls
@@ -18,12 +49,16 @@ CLEANUP_CONTAINERS=()
 CLEANUP_DIRS=()
 
 cleanup() {
+    # The `${arr+"${arr[@]}"}` form expands to nothing when the array has
+    # never been assigned *or* is empty, avoiding "unbound variable" under
+    # bash 3.2 + set -u (macOS /bin/bash). Bash 4.4+ handles empty arrays
+    # cleanly; this keeps local test runs working on stock macOS too.
     local c
-    for c in "${CLEANUP_CONTAINERS[@]}"; do
+    for c in ${CLEANUP_CONTAINERS+"${CLEANUP_CONTAINERS[@]}"}; do
         docker rm -f "$c" >/dev/null 2>&1 || true
     done
     local d
-    for d in "${CLEANUP_DIRS[@]}"; do
+    for d in ${CLEANUP_DIRS+"${CLEANUP_DIRS[@]}"}; do
         rm -rf "$d" 2>/dev/null || true
     done
 }
@@ -148,7 +183,7 @@ echo ""
 echo "=== Runtime tests (production fresh install): $IMAGE ==="
 
 CONTAINER="roon-runtime-production"
-ROON_DIR="$(mktemp -d)"
+ROON_DIR="$(mktemp_roon_dir)"
 CLEANUP_DIRS+=("$ROON_DIR")
 echo "    Temp dir: $ROON_DIR"
 
@@ -214,7 +249,7 @@ echo ""
 echo "=== Runtime tests (earlyaccess fresh install): $IMAGE ==="
 
 CONTAINER="roon-runtime-ea-fresh"
-ROON_DIR="$(mktemp -d)"
+ROON_DIR="$(mktemp_roon_dir)"
 CLEANUP_DIRS+=("$ROON_DIR")
 echo "    Temp dir: $ROON_DIR"
 
@@ -245,7 +280,7 @@ echo ""
 echo "=== Runtime tests (switch production → earlyaccess): $IMAGE ==="
 
 CONTAINER="roon-runtime-switch-prod-ea"
-ROON_DIR="$(mktemp -d)"
+ROON_DIR="$(mktemp_roon_dir)"
 CLEANUP_DIRS+=("$ROON_DIR")
 echo "    Temp dir: $ROON_DIR"
 
@@ -297,7 +332,7 @@ echo ""
 echo "=== Runtime tests (switch earlyaccess → production): $IMAGE ==="
 
 CONTAINER="roon-runtime-switch-ea-prod"
-ROON_DIR="$(mktemp -d)"
+ROON_DIR="$(mktemp_roon_dir)"
 CLEANUP_DIRS+=("$ROON_DIR")
 echo "    Temp dir: $ROON_DIR"
 
@@ -333,7 +368,7 @@ echo ""
 echo "=== Runtime tests (restart skips download): $IMAGE ==="
 
 CONTAINER="roon-runtime-restart"
-ROON_DIR="$(mktemp -d)"
+ROON_DIR="$(mktemp_roon_dir)"
 CLEANUP_DIRS+=("$ROON_DIR")
 echo "    Temp dir: $ROON_DIR"
 
@@ -385,7 +420,7 @@ echo ""
 echo "=== Runtime tests (sticky earlyaccess): $IMAGE ==="
 
 CONTAINER="roon-runtime-sticky-ea"
-ROON_DIR="$(mktemp -d)"
+ROON_DIR="$(mktemp_roon_dir)"
 CLEANUP_DIRS+=("$ROON_DIR")
 echo "    Temp dir: $ROON_DIR"
 
