@@ -29,13 +29,21 @@ cleanup() {
 }
 trap cleanup EXIT
 
+# Run $@ quietly; on failure, replay captured stderr indented under the
+# FAIL line so CI logs show *why* the check failed instead of just what.
+# stdout is always discarded (most checks call docker inspect/cat/etc. and
+# the stdout would be noise); stderr is captured via `2>&1 >/dev/null`.
 check() {
     local desc="$1"; shift
-    if "$@" >/dev/null 2>&1; then
+    local err
+    if err=$("$@" 2>&1 >/dev/null); then
         echo "  PASS  $desc"
         PASS=$((PASS + 1))
     else
         echo "  FAIL  $desc"
+        if [ -n "$err" ]; then
+            printf '        | %s\n' "$err"
+        fi
         FAIL=$((FAIL + 1))
     fi
 }
