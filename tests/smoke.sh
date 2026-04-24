@@ -79,7 +79,95 @@ EXPLICIT_OUTPUT=$(docker run --rm -e ROON_INSTALL_BRANCH=production -e ROON_DOWN
 check "explicit ROON_INSTALL_BRANCH=production passes validation" \
     sh -c '! echo "$1" | grep -q "Invalid ROON_INSTALL_BRANCH"' _ "$EXPLICIT_OUTPUT"
 
-# Read-only /Roon mount should fail with writable error
+# Whitespace tolerance: leading, trailing, and newline variants should
+# normalize to the clean value. Copy-paste from YAML or docker-run command
+# lines easily introduces these; erroring out on them is an unfriendly
+# trap that's easy to avoid with a sed trim.
+LEAD_TMP=$(mktemp -d)
+LEAD_OUTPUT=$(docker run --rm -e "ROON_INSTALL_BRANCH= earlyaccess" -e ROON_DOWNLOAD_URL=http://localhost:1 -v "$LEAD_TMP:/Roon" "$IMAGE" 2>&1) || true
+rm -rf "$LEAD_TMP"
+check "leading whitespace in ROON_INSTALL_BRANCH: stripped" \
+    sh -c 'echo "$1" | grep -q "Requested branch .earlyaccess."' _ "$LEAD_OUTPUT"
+
+TRAIL_TMP=$(mktemp -d)
+TRAIL_OUTPUT=$(docker run --rm -e "ROON_INSTALL_BRANCH=earlyaccess  " -e ROON_DOWNLOAD_URL=http://localhost:1 -v "$TRAIL_TMP:/Roon" "$IMAGE" 2>&1) || true
+rm -rf "$TRAIL_TMP"
+check "trailing whitespace in ROON_INSTALL_BRANCH: stripped" \
+    sh -c 'echo "$1" | grep -q "Requested branch .earlyaccess."' _ "$TRAIL_OUTPUT"
+
+NEWLINE_TMP=$(mktemp -d)
+NEWLINE_OUTPUT=$(docker run --rm -e "ROON_INSTALL_BRANCH=$(printf 'earlyaccess\n')" -e ROON_DOWNLOAD_URL=http://localhost:1 -v "$NEWLINE_TMP:/Roon" "$IMAGE" 2>&1) || true
+rm -rf "$NEWLINE_TMP"
+check "trailing newline in ROON_INSTALL_BRANCH: stripped" \
+    sh -c 'echo "$1" | grep -q "Requested branch .earlyaccess."' _ "$NEWLINE_OUTPUT"
+
+# Internal whitespace is still a user error — don't silently merge tokens.
+INTERNAL_TMP=$(mktemp -d)
+INTERNAL_EXIT=0
+INTERNAL_OUTPUT=$(docker run --rm -e "ROON_INSTALL_BRANCH=Early Access" -v "$INTERNAL_TMP:/Roon" "$IMAGE" 2>&1) || INTERNAL_EXIT=$?
+rm -rf "$INTERNAL_TMP"
+check "internal whitespace in ROON_INSTALL_BRANCH: still rejected" \
+    test "$INTERNAL_EXIT" -ne 0
+
+# Whitespace tolerance: leading, trailing, and newline variants should
+# normalize to the clean value. Copy-paste from YAML or docker-run command
+# lines easily introduces these; erroring out on them is an unfriendly
+# trap that's easy to avoid with a sed trim.
+LEAD_TMP=$(mktemp -d)
+LEAD_OUTPUT=$(docker run --rm -e "ROON_INSTALL_BRANCH= earlyaccess" -e ROON_DOWNLOAD_URL=http://localhost:1 -v "$LEAD_TMP:/Roon" "$IMAGE" 2>&1) || true
+rm -rf "$LEAD_TMP"
+check "leading whitespace in ROON_INSTALL_BRANCH: stripped" \
+    sh -c 'echo "$1" | grep -q "Requested branch .earlyaccess."' _ "$LEAD_OUTPUT"
+
+TRAIL_TMP=$(mktemp -d)
+TRAIL_OUTPUT=$(docker run --rm -e "ROON_INSTALL_BRANCH=earlyaccess  " -e ROON_DOWNLOAD_URL=http://localhost:1 -v "$TRAIL_TMP:/Roon" "$IMAGE" 2>&1) || true
+rm -rf "$TRAIL_TMP"
+check "trailing whitespace in ROON_INSTALL_BRANCH: stripped" \
+    sh -c 'echo "$1" | grep -q "Requested branch .earlyaccess."' _ "$TRAIL_OUTPUT"
+
+NEWLINE_TMP=$(mktemp -d)
+NEWLINE_OUTPUT=$(docker run --rm -e "ROON_INSTALL_BRANCH=$(printf 'earlyaccess\n')" -e ROON_DOWNLOAD_URL=http://localhost:1 -v "$NEWLINE_TMP:/Roon" "$IMAGE" 2>&1) || true
+rm -rf "$NEWLINE_TMP"
+check "trailing newline in ROON_INSTALL_BRANCH: stripped" \
+    sh -c 'echo "$1" | grep -q "Requested branch .earlyaccess."' _ "$NEWLINE_OUTPUT"
+
+# Internal whitespace is still a user error — don't silently merge tokens.
+INTERNAL_TMP=$(mktemp -d)
+INTERNAL_EXIT=0
+INTERNAL_OUTPUT=$(docker run --rm -e "ROON_INSTALL_BRANCH=Early Access" -v "$INTERNAL_TMP:/Roon" "$IMAGE" 2>&1) || INTERNAL_EXIT=$?
+rm -rf "$INTERNAL_TMP"
+check "internal whitespace in ROON_INSTALL_BRANCH: still rejected" \
+    test "$INTERNAL_EXIT" -ne 0
+
+# Unset ROON_INSTALL_BRANCH with no VERSION file → defaults to production
+UNSET_TMP=$(mktemp -d)
+UNSET_EXIT=0
+UNSET_OUTPUT=$(docker run --rm -e ROON_DOWNLOAD_URL=http://localhost:1 -v "$UNSET_TMP:/Roon" "$IMAGE" 2>&1) || UNSET_EXIT=$?
+rm -rf "$UNSET_TMP"
+check "unset ROON_INSTALL_BRANCH + no install: uses default branch 'production'" \
+    sh -c 'echo "$1" | grep -q "using default branch .production."' _ "$UNSET_OUTPUT"
+
+# Empty VERSION file (corrupt prior install) → entrypoint should NOT log
+# "Detected existing install (branch: )" with a blank, and should fall
+# through to the no-install path cleanly. This guards the whitespace-strip
+# in the installed-branch detection.
+EMPTY_VER_TMP=$(mktemp -d)
+mkdir -p "$EMPTY_VER_TMP/app/RoonServer"
+: > "$EMPTY_VER_TMP/app/RoonServer/VERSION"
+EMPTY_VER_OUTPUT=$(docker run --rm -e ROON_DOWNLOAD_URL=http://localhost:1 -v "$EMPTY_VER_TMP:/Roon" "$IMAGE" 2>&1) || true
+rm -rf "$EMPTY_VER_TMP" 2>/dev/null || true
+check "empty VERSION file: no blank-branch log line" \
+    sh -c '! echo "$1" | grep -q "Detected existing RoonServer install (branch: )"' _ "$EMPTY_VER_OUTPUT"
+check "empty VERSION file: logs distinct empty-file message" \
+    sh -c 'echo "$1" | grep -q "VERSION file.*is empty"' _ "$EMPTY_VER_OUTPUT"
+
+# Startup banner is always emitted (regardless of branch resolution outcome)
+check "startup banner always logged" \
+    sh -c 'echo "$1" | grep -q "^Roon Docker image "' _ "$UNSET_OUTPUT"
+
+# ─── Entrypoint validation: /Roon mount ──────────────────────────
+
+RO_TMP=$(mktemp -d)
 RO_EXIT=0
 RO_OUTPUT=$(docker run --rm -v "$(mktemp -d):/Roon:ro" "$IMAGE" 2>&1) || RO_EXIT=$?
 check "exits with error when /Roon is read-only" \
