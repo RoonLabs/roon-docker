@@ -1,0 +1,26 @@
+{
+  "name": "roon-docker-configurator",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Static web configurator for generating docker-compose.yml and docker run commands for the official RoonServer Docker image.",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc --noEmit && vite build",
+    "preview": "vite preview",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "test:e2e": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.59.1",
+    "@tailwindcss/vite": "^4.2.4",
+    "@types/node": "^25.6.0",
+    "ajv": "^8.18.0",
+    "tailwindcss": "^4.2.4",
+    "typescript": "^6.0.3",
+    "vite": "^8.0.9",
+    "vitest": "^4.1.5"
+  }
+}

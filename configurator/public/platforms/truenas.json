@@ -1,0 +1,11 @@
+{
+  "id": "truenas",
+  "label": "TrueNAS",
+  "roon": "/mnt/tank/apps/roon",
+  "music": "/mnt/tank/media/music",
+  "backup": "/mnt/tank/backups/roon",
+  "prefix": "/mnt/tank/",
+  "hint": "TrueNAS 24.10+ (native Docker) required. Replace 'tank' with your pool name (Storage → Pools) and create dedicated datasets for these paths — TrueNAS paths are case-sensitive.",
+  "rootPattern": "^/mnt/",
+  "userOverride": "0:0"
+}

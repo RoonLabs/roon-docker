@@ -1,0 +1,9 @@
+{
+  "id": "linux",
+  "label": "Linux",
+  "roon": "/var/lib/roon",
+  "music": "/mnt/music",
+  "backup": "/var/backups/roon",
+  "prefix": "/mnt/",
+  "hint": "Paths set to standard Linux conventions (FHS: /var/lib for service state, /var/backups for backups, /mnt for mounted media)."
+}

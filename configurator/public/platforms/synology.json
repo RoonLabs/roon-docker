@@ -1,0 +1,10 @@
+{
+  "id": "synology",
+  "label": "Synology",
+  "roon": "/volume1/docker/roon",
+  "music": "/volume1/music",
+  "backup": "/volume1/roon-backups",
+  "prefix": "/volume1/",
+  "hint": "Paths set for Synology DSM. Adjust volume1 if needed.",
+  "rootPattern": "^/volume\\d+/"
+}

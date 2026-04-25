@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "platform.schema.json",
+  "title": "Configurator platform preset",
+  "description": "Shape for a platform file under public/platforms/. Every field is validated by the test suite so a malformed contribution fails CI before merge.",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["id", "label", "roon", "music", "backup", "prefix", "hint"],
+  "properties": {
+    "id": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9-]*$",
+      "description": "Lowercase identifier; must match the filename minus .json extension."
+    },
+    "label": {
+      "type": "string",
+      "minLength": 1,
+      "description": "Display text in the platform dropdown and inline warnings."
+    },
+    "roon": {
+      "type": "string",
+      "pattern": "^/",
+      "description": "Default host path for the /Roon container mount."
+    },
+    "music": {
+      "type": "string",
+      "pattern": "^/",
+      "description": "Default host path for the /Music container mount."
+    },
+    "backup": {
+      "type": "string",
+      "pattern": "^/",
+      "description": "Default host path for the /RoonBackups container mount."
+    },
+    "prefix": {
+      "type": "string",
+      "description": "Placeholder prefix for the add-mount input. Empty string allowed for platforms with no standard root."
+    },
+    "hint": {
+      "type": "string",
+      "minLength": 1,
+      "description": "One-sentence help text shown under the platform dropdown."
+    },
+    "rootPattern": {
+      "type": "string",
+      "description": "Optional. JavaScript regex string; host paths that don't match trigger a soft warning."
+    },
+    "hidden": {
+      "type": "boolean",
+      "description": "Optional. true keeps the platform loaded but omits it from the dropdown."
+    },
+    "userOverride": {
+      "type": "string",
+      "pattern": "^\\d+(:\\d+)?$",
+      "description": "Optional. UID or UID:GID string (e.g. \"0:0\") forced on the emitted container output when this platform is selected. Use for platforms that default to a non-root UID when Roon's image needs root (TrueNAS Apps defaults to UID 568)."
+    }
+  }
+}

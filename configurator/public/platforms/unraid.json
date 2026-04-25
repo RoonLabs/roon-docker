@@ -1,0 +1,10 @@
+{
+  "id": "unraid",
+  "label": "Unraid",
+  "roon": "/mnt/user/appdata/roon",
+  "music": "/mnt/user/music",
+  "backup": "/mnt/user/backups/roon",
+  "prefix": "/mnt/user/",
+  "hint": "Set the 'appdata' share to Primary=cache, Secondary=None (cache-only) so Mover never touches the Roon database mid-write. For extra speed, advanced users can map the Roon folder to /mnt/cache/appdata/roon to bypass FUSE. Note: the official Roon image does not use PUID/PGID.",
+  "rootPattern": "^/mnt/"
+}

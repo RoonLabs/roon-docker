@@ -1,0 +1,422 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>RoonServer Docker Configuration Generator</title>
+<meta name="description" content="Generate Docker Compose or docker run configurations for the official RoonServer Docker image.">
+<!--
+  Defense-in-depth CSP: the app loads only first-party JSON via fetch and never
+  renders user-supplied HTML (highlight.ts uses textContent + createTextNode
+  exclusively). 'unsafe-inline' is needed for style only because Tailwind
+  generates inline styles for forced-colors / focus rings; could be removed
+  if those move to external CSS. No 'unsafe-eval' — Vite's prod build is
+  static. frame-ancestors 'none' blocks clickjacking.
+-->
+<meta http-equiv="Content-Security-Policy" content="default-src 'self'; img-src 'self' data:; style-src 'self' 'unsafe-inline'; script-src 'self'; connect-src 'self'; frame-ancestors 'none'; base-uri 'self'; form-action 'none'">
+<meta http-equiv="X-Content-Type-Options" content="nosniff">
+<meta name="referrer" content="no-referrer">
+<style>
+  /* Loading overlay: covers the whole viewport with the Roon wordmark + a
+     spinner until the app finishes its initial render. main.ts adds
+     `app-ready` once loadPlatforms() + the DOM init pass complete; the
+     window `load` event below adds it as a safety net even if main.ts
+     errors before getting there. */
+  #app-loading {
+    position: fixed; inset: 0; z-index: 100;
+    display: flex; align-items: center; justify-content: center;
+    background: #0d131d;
+    transition: opacity 200ms ease-out, visibility 0s linear 200ms;
+  }
+  #app-loading svg { width: 96px; height: 96px; color: #a78bfa; }
+  /* Audio-bar pulse animation, modeled on the Roon desktop app's
+     `footer_loading` animateddrawable (Client/ui/animations.broo:198):
+     ping-pong height oscillation with the three bars staggered out of
+     phase. The original cycles 13 frames over ~870ms; we use a 1.2s
+     cubic-bezier ease that lands close to the perceived rhythm.
+     transform-origin: center 12 puts the scale center at the icon's
+     vertical midline so each bar grows symmetrically up and down. */
+  #app-loading .bar { transform-origin: center 12px; animation: app-bar 1.2s cubic-bezier(.4,0,.6,1) infinite; }
+  #app-loading .bar-1 { animation-delay: 0s; }
+  #app-loading .bar-2 { animation-delay: -0.4s; }
+  #app-loading .bar-3 { animation-delay: -0.8s; }
+  @keyframes app-bar {
+    0%, 100% { transform: scaleY(0.35); }
+    50%      { transform: scaleY(1); }
+  }
+  body.app-ready #app-loading { opacity: 0; visibility: hidden; }
+  @media (prefers-reduced-motion: reduce) {
+    #app-loading .bar { animation: none; transform: scaleY(1); }
+    #app-loading, body.app-ready #app-loading { transition: none; }
+  }
+  /* FOUC cap: any unsized inline SVG defaults to 1.25rem instead of
+     rendering at SVG's intrinsic 300×150 default before Tailwind loads. */
+  svg:not([width]):not([height]) { width: 1.25rem; height: 1.25rem; }
+</style>
+<noscript>
+  <!-- JS-disabled visitors see the static layout (functional except for
+       output regen). Hide the loading overlay so they aren't stuck behind
+       it forever. -->
+  <style>#app-loading { display: none; }</style>
+</noscript>
+</head>
+<body class="bg-surface-950 min-h-screen font-sans" style="background:#0d131d;color:rgba(255,255,255,0.87)">
+
+  <!-- Loading overlay shown until main.ts adds `app-ready` to body.
+       Hidden via display:none for users without JS (see noscript above). -->
+  <div id="app-loading" role="status" aria-live="polite" aria-label="Loading configurator">
+    <svg width="96" height="96" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+      <!-- Half-moon (static): the left semicircle from the original roon-moon -->
+      <path d="M11.9997 24C5.37243 23.9998 0 18.6273 0 12C0 5.37268 5.37243 0.000154372 11.9997 0C12.5301 0.000155039 12.96 0.431982 12.96 0.959358V23.0406C12.96 23.5704 12.5299 23.9998 11.9997 24Z" fill="currentColor"/>
+      <!-- Three audio bars (animated). Heights chosen to match the original
+           roon-moon at rest — bar-1 = 12.96 tall (small), bar-2 = 18.24 tall
+           (tallest), bar-3 = 6.24 tall (shortest). Rounded ends via rx/ry. -->
+      <rect class="bar bar-1" x="14.64" y="5.52"  width="1.68" height="12.96" rx="0.84" ry="0.84" fill="currentColor"/>
+      <rect class="bar bar-2" x="18"    y="2.88"  width="1.68" height="18.24" rx="0.84" ry="0.84" fill="currentColor"/>
+      <rect class="bar bar-3" x="21.36" y="8.88"  width="1.68" height="6.24"  rx="0.84" ry="0.84" fill="currentColor"/>
+    </svg>
+    <span class="sr-only">Loading…</span>
+  </div>
+
+  <a href="#main" class="skip-link">Skip to content</a>
+
+  <!-- Header -->
+  <header class="border-b border-surface-600/40 bg-surface-700/80 backdrop-blur-sm sticky top-0 z-50">
+    <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div class="flex items-center justify-between h-16">
+        <div class="flex items-center gap-3">
+          <div class="flex items-center gap-2">
+            <svg width="28" height="28" class="w-7 h-7 text-roon-400" viewBox="0 0 24 24" fill="none" aria-hidden="true">
+              <path fill-rule="evenodd" clip-rule="evenodd" d="M11.9997 24C5.37243 23.9998 0 18.6273 0 12C0 5.37268 5.37243 0.000154372 11.9997 0C12.5301 0.000155039 12.96 0.431982 12.96 0.959358V23.0406C12.96 23.5704 12.5299 23.9998 11.9997 24ZM14.64 6.36036C14.64 5.89624 15.017 5.52 15.48 5.52C15.9439 5.52 16.32 5.89389 16.32 6.36036V17.6396C16.32 18.1038 15.943 18.48 15.48 18.48C15.0161 18.48 14.64 18.1061 14.64 17.6396V6.36036ZM18 3.72317C18 3.2575 18.377 2.88 18.84 2.88C19.3039 2.88 19.68 3.25678 19.68 3.72317V20.2768C19.68 20.7425 19.303 21.12 18.84 21.12C18.3761 21.12 18 20.7432 18 20.2768V3.72317ZM21.36 9.72155C21.36 9.25678 21.737 8.88 22.2 8.88C22.6639 8.88 23.04 9.25629 23.04 9.72155V14.2784C23.04 14.7432 22.663 15.12 22.2 15.12C21.7361 15.12 21.36 14.7437 21.36 14.2784V9.72155Z" fill="currentColor"/>
+            </svg>
+            <span class="text-lg font-semibold text-white tracking-tight">RoonServer</span>
+          </div>
+          <span class="hidden sm:inline text-surface-300 text-sm">Docker Configuration Generator</span>
+        </div>
+        <nav class="flex items-center gap-1" aria-label="Resources">
+          <a href="https://help.roonlabs.com/portal/en/kb/articles/installing-the-roon-server-via-docker"
+             class="flex items-center gap-2 text-sm text-surface-300 hover:text-white transition-colors duration-200 px-3 py-1.5 rounded-lg hover:bg-surface-700/50"
+             target="_blank" rel="noopener noreferrer" aria-label="Roon's Docker installation guide (opens in new tab)">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M2 3h6a4 4 0 0 1 4 4v14a3 3 0 0 0-3-3H2z"></path>
+              <path d="M22 3h-6a4 4 0 0 0-4 4v14a3 3 0 0 1 3-3h7z"></path>
+            </svg>
+            <span class="hidden sm:inline">Installation guide</span>
+          </a>
+          <a href="https://github.com/RoonLabs/roon-docker/issues"
+             class="flex items-center gap-2 text-sm text-surface-300 hover:text-white transition-colors duration-200 px-3 py-1.5 rounded-lg hover:bg-surface-700/50"
+             target="_blank" rel="noopener noreferrer" aria-label="Report feedback on GitHub Issues (opens in new tab)">
+            <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+            </svg>
+            <span class="hidden sm:inline">Feedback</span>
+          </a>
+          <a href="https://github.com/RoonLabs/roon-docker"
+             class="flex items-center gap-2 text-sm text-surface-300 hover:text-white transition-colors duration-200 px-3 py-1.5 rounded-lg hover:bg-surface-700/50"
+             target="_blank" rel="noopener noreferrer" aria-label="View source on GitHub (opens in new tab)">
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 0c-6.626 0-12 5.373-12 12 0 5.302 3.438 9.8 8.207 11.387.599.111.793-.261.793-.577v-2.234c-3.338.726-4.033-1.416-4.033-1.416-.546-1.387-1.333-1.756-1.333-1.756-1.089-.745.083-.729.083-.729 1.205.084 1.839 1.237 1.839 1.237 1.07 1.834 2.807 1.304 3.492.997.107-.775.418-1.305.762-1.604-2.665-.305-5.467-1.334-5.467-5.931 0-1.311.469-2.381 1.236-3.221-.124-.303-.535-1.524.117-3.176 0 0 1.008-.322 3.301 1.23.957-.266 1.983-.399 3.003-.404 1.02.005 2.047.138 3.006.404 2.291-1.552 3.297-1.23 3.297-1.23.653 1.653.242 2.874.118 3.176.77.84 1.235 1.911 1.235 3.221 0 4.609-2.807 5.624-5.479 5.921.43.372.823 1.102.823 2.222v3.293c0 .319.192.694.801.576 4.765-1.589 8.199-6.086 8.199-11.386 0-6.627-5.373-12-12-12z"/></svg>
+            <span class="hidden sm:inline">GitHub</span>
+          </a>
+        </nav>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Content -->
+  <main id="main" class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 lg:py-10">
+    <h1 class="sr-only">RoonServer Docker configuration generator</h1>
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-6 lg:gap-8">
+
+      <!-- Left Column: Options -->
+      <div class="lg:col-span-5 space-y-5">
+
+        <!-- Platform Selector -->
+        <section class="bg-surface-800/60 border border-surface-500/40 rounded-xl p-5 backdrop-blur-sm ring-1 ring-roon-400/40" aria-labelledby="section-platform">
+          <div class="flex items-center gap-2 mb-3">
+            <h2 id="section-platform" class="text-xs font-semibold uppercase tracking-wider text-slate-200">Platform</h2>
+          </div>
+          <label for="platform-select" class="sr-only">Select your platform</label>
+          <select id="platform-select"
+                  class="w-full px-3 py-2 bg-surface-700 border border-surface-500/50 rounded-lg text-sm text-slate-200 focus:border-roon-400 focus:ring-1 focus:ring-roon-300 transition-colors duration-200 outline-none appearance-none"
+                  style="background-image:url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M3%204.5l3%203%203-3%22%2F%3E%3C%2Fsvg%3E');background-repeat:no-repeat;background-position:right 12px center;padding-right:36px">
+          </select>
+          <div class="text-xs text-surface-300 mt-3 space-y-2" id="platform-hint" aria-live="polite"></div>
+        </section>
+
+        <!-- Release Branch -->
+        <section class="bg-surface-800/60 border border-surface-500/40 rounded-xl p-5 backdrop-blur-sm" aria-labelledby="section-branch">
+          <h2 id="section-branch" class="text-xs font-semibold uppercase tracking-wider text-slate-200 mb-3">Roon Server Release Branch</h2>
+          <div>
+            <label class="block text-xs text-surface-300 mb-1.5" for="branch-select">Which release branch to install on first start</label>
+            <select id="branch-select"
+                    class="w-full px-3 py-2 bg-surface-700 border border-surface-500/50 rounded-lg text-sm text-slate-200 focus:border-roon-400 focus:ring-1 focus:ring-roon-300 transition-colors duration-200 outline-none appearance-none"
+                    style="background-image:url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M3%204.5l3%203%203-3%22%2F%3E%3C%2Fsvg%3E');background-repeat:no-repeat;background-position:right 12px center;padding-right:36px">
+              <option value="production" selected>Production</option>
+              <option value="earlyaccess">Early Access</option>
+            </select>
+            <p class="text-xs text-surface-300 mt-1.5" id="branch-hint"></p>
+          </div>
+        </section>
+
+        <!-- Volumes -->
+        <section class="bg-surface-800/60 border border-surface-500/40 rounded-xl p-5 backdrop-blur-sm" aria-labelledby="section-volumes">
+          <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center gap-2">
+              <h2 id="section-volumes" class="text-xs font-semibold uppercase tracking-wider text-slate-200">Volumes</h2>
+              <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-red-500/15 text-red-300 ring-1 ring-red-500/20">Required</span>
+            </div>
+            <button type="button" id="btn-add-volume" data-tooltip="Add volume mount" aria-label="Add volume mount"
+                    class="inline-flex items-center justify-center w-8 h-8 text-surface-300 hover:text-white bg-surface-700/60 hover:bg-surface-600/80 border border-surface-500/40 hover:border-roon-400/50 rounded-lg transition-all duration-200">
+              <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 5v14M5 12h14"/></svg>
+            </button>
+          </div>
+          <div class="space-y-4">
+            <div>
+              <label class="text-sm font-medium text-white" for="vol-roon">/Roon</label>
+              <p class="text-xs text-surface-300 mt-0.5 mb-2" id="vol-roon-desc">Database, settings, cache, and machine identity. Must be writable and persistent.</p>
+              <input type="text" id="vol-roon" aria-required="true" aria-describedby="vol-roon-desc"
+                     class="w-full px-3 py-2 bg-surface-700 border border-surface-500/50 rounded-lg text-sm font-mono text-slate-200 focus:border-roon-400 focus:ring-1 focus:ring-roon-300 transition-colors duration-200 outline-none">
+              <p class="vol-warning text-xs text-amber-400 mt-1.5 hidden" id="vol-roon-warning" aria-live="polite"></p>
+            </div>
+            <div class="border-t border-surface-500/30 pt-4">
+              <label class="text-sm font-medium text-white" for="vol-music">/Music</label>
+              <p class="text-xs text-surface-300 mt-0.5 mb-2" id="vol-music-desc">Your primary music library.</p>
+              <input type="text" id="vol-music" aria-required="true" aria-describedby="vol-music-desc"
+                     class="w-full px-3 py-2 bg-surface-700 border border-surface-500/50 rounded-lg text-sm font-mono text-slate-200 focus:border-roon-400 focus:ring-1 focus:ring-roon-300 transition-colors duration-200 outline-none">
+              <p class="vol-warning text-xs text-amber-400 mt-1.5 hidden" id="vol-music-warning" aria-live="polite"></p>
+            </div>
+            <div class="border-t border-surface-500/30 pt-4">
+              <label class="text-sm font-medium text-white" for="vol-backup">/RoonBackups</label>
+              <p class="text-xs text-surface-300 mt-0.5 mb-2" id="vol-backup-desc">A host path for Roon's backup destination. Roon's Settings &gt; Backups screen is where you actually enable scheduled backups; the path here just gives Roon somewhere to write them.</p>
+              <input type="text" id="vol-backup" aria-required="true" aria-describedby="vol-backup-desc"
+                     class="w-full px-3 py-2 bg-surface-700 border border-surface-500/50 rounded-lg text-sm font-mono text-slate-200 focus:border-roon-400 focus:ring-1 focus:ring-roon-300 transition-colors duration-200 outline-none">
+              <p class="vol-warning text-xs text-amber-400 mt-1.5 hidden" id="vol-backup-warning" aria-live="polite"></p>
+            </div>
+
+            <!-- Extra volume mounts -->
+            <div id="extra-volumes"></div>
+
+          </div>
+        </section>
+
+        <!-- Options -->
+        <section class="bg-surface-800/60 border border-surface-500/40 rounded-xl p-5 backdrop-blur-sm" aria-labelledby="section-options">
+          <h2 id="section-options" class="text-xs font-semibold uppercase tracking-wider text-slate-200 mb-4">Options</h2>
+          <div class="space-y-0">
+
+            <!-- Timezone -->
+            <div class="py-3 border-b border-surface-500/30">
+              <div class="flex items-start gap-3">
+                <label class="relative inline-flex items-center cursor-pointer mt-0.5 flex-shrink-0">
+                  <input type="checkbox" id="opt-tz" role="switch" class="sr-only peer" checked>
+                  <div class="toggle-track"></div>
+                </label>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <label class="text-sm font-medium text-white cursor-pointer" for="opt-tz">Set timezone</label>
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/20">Recommended</span>
+                  </div>
+                  <p class="text-xs text-surface-300 mt-0.5">Correct timestamps for logs, last.fm scrobbles, and backup schedules.</p>
+                  <div class="mt-2 overflow-hidden transition-all duration-200" id="tz-input-wrap" style="max-height:60px;opacity:1">
+                    <label for="tz-value" class="sr-only">Timezone</label>
+                    <select id="tz-value"
+                            class="w-full px-3 py-2 bg-surface-700 border border-surface-500/50 rounded-lg text-sm text-slate-200 focus:border-roon-400 focus:ring-1 focus:ring-roon-300 transition-colors duration-200 outline-none appearance-none"
+                            style="background-image:url('data:image/svg+xml;charset=UTF-8,%3Csvg%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%20width%3D%2212%22%20height%3D%2212%22%20viewBox%3D%220%200%2012%2012%22%3E%3Cpath%20fill%3D%22%236b7280%22%20d%3D%22M3%204.5l3%203%203-3%22%2F%3E%3C%2Fsvg%3E');background-repeat:no-repeat;background-position:right 12px center;padding-right:36px">
+                      <option value="UTC">UTC</option>
+                    </select>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Logging -->
+            <div class="py-3 border-b border-surface-500/30">
+              <div class="flex items-start gap-3">
+                <label class="relative inline-flex items-center cursor-pointer mt-0.5 flex-shrink-0">
+                  <input type="checkbox" id="opt-logging" role="switch" class="sr-only peer" checked>
+                  <div class="toggle-track"></div>
+                </label>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-2 flex-wrap">
+                    <label class="text-sm font-medium text-white cursor-pointer" for="opt-logging">Local logging driver</label>
+                    <span class="inline-flex items-center px-1.5 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider bg-amber-500/15 text-amber-400 ring-1 ring-amber-500/20">Recommended</span>
+                  </div>
+                  <p class="text-xs text-surface-300 mt-0.5">Prevents unbounded Docker log growth. Uses Docker's local log driver with automatic rotation.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- CIFS -->
+            <div class="py-3 border-b border-surface-500/30">
+              <div class="flex items-start gap-3">
+                <label class="relative inline-flex items-center cursor-pointer mt-0.5 flex-shrink-0">
+                  <input type="checkbox" id="opt-cifs" role="switch" class="sr-only peer">
+                  <div class="toggle-track"></div>
+                </label>
+                <div class="flex-1 min-w-0">
+                  <label class="text-sm font-medium text-white cursor-pointer" for="opt-cifs">SMB/CIFS mount support</label>
+                  <p class="text-xs text-surface-300 mt-0.5">Grants the capabilities and relaxes the AppArmor profile needed to mount SMB shares. Most users should mount shares on the host instead.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- USB Audio -->
+            <div class="py-3 border-b border-surface-500/30">
+              <div class="flex items-start gap-3">
+                <label class="relative inline-flex items-center cursor-pointer mt-0.5 flex-shrink-0">
+                  <input type="checkbox" id="opt-usb-audio" role="switch" class="sr-only peer">
+                  <div class="toggle-track"></div>
+                </label>
+                <div class="flex-1 min-w-0">
+                  <label class="text-sm font-medium text-white cursor-pointer" for="opt-usb-audio">USB audio (DAC)</label>
+                  <p class="text-xs text-surface-300 mt-0.5">Pass through USB and ALSA devices for local audio output to a USB DAC connected to the host. Not needed if streaming to network endpoints.</p>
+                </div>
+              </div>
+            </div>
+
+            <!-- HDMI Audio -->
+            <div class="py-3">
+              <div class="flex items-start gap-3">
+                <label class="relative inline-flex items-center cursor-pointer mt-0.5 flex-shrink-0">
+                  <input type="checkbox" id="opt-hdmi-audio" role="switch" class="sr-only peer">
+                  <div class="toggle-track"></div>
+                </label>
+                <div class="flex-1 min-w-0">
+                  <label class="text-sm font-medium text-white cursor-pointer" for="opt-hdmi-audio">HDMI audio</label>
+                  <p class="text-xs text-surface-300 mt-0.5">Pass through GPU and ALSA devices for HDMI audio output. Requires GPU drivers on the host.</p>
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </section>
+
+      </div>
+
+      <!-- Right Column: Output -->
+      <div class="lg:col-span-7">
+        <div class="lg:sticky lg:top-24">
+
+          <!-- Output Mode Tabs + Actions -->
+          <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-3">
+            <div class="flex bg-surface-700/80 p-1 rounded-lg ring-1 ring-surface-500/30" role="tablist" aria-label="Output format">
+              <button id="tab-compose" role="tab" aria-selected="true" aria-controls="output" tabindex="0" class="tab-btn">
+                docker-compose.yml
+              </button>
+              <button id="tab-run" role="tab" aria-selected="false" aria-controls="output" tabindex="-1" class="tab-btn">
+                docker run
+              </button>
+            </div>
+            <div class="flex gap-1.5">
+              <button id="btn-copy" data-tooltip="Copy to clipboard" aria-label="Copy to clipboard"
+                      class="inline-flex items-center justify-center w-8 h-8 bg-surface-700/60 hover:bg-surface-600/80 border border-surface-500/40 hover:border-roon-400/50 rounded-lg text-surface-300 hover:text-white transition-all duration-200 active:scale-95">
+                <svg id="icon-copy" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <svg id="icon-check" class="w-4 h-4 hidden text-green-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </button>
+              <button id="btn-download" data-tooltip="Download as file" aria-label="Download file"
+                      class="inline-flex items-center justify-center w-8 h-8 bg-surface-700/60 hover:bg-surface-600/80 border border-surface-500/40 hover:border-roon-400/50 rounded-lg text-surface-300 hover:text-white transition-all duration-200 active:scale-95">
+                <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                  <polyline points="7 10 12 15 17 10"></polyline>
+                  <line x1="12" y1="15" x2="12" y2="3"></line>
+                </svg>
+              </button>
+              <button id="btn-share" data-tooltip="Copy share link" aria-label="Copy share link"
+                      class="inline-flex items-center justify-center w-8 h-8 bg-surface-700/60 hover:bg-surface-600/80 border border-surface-500/40 hover:border-roon-400/50 rounded-lg text-surface-300 hover:text-white transition-all duration-200 active:scale-95">
+                <svg id="icon-share" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+                  <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
+                </svg>
+                <svg id="icon-share-check" class="w-4 h-4 hidden text-green-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </button>
+              <!-- Red-hover styling visually separates Reset from the other
+                   three actions, signalling that it mutates configuration
+                   rather than exporting or sharing it. -->
+              <button id="btn-reset" data-tooltip="Reset to defaults" aria-label="Reset to defaults"
+                      class="inline-flex items-center justify-center w-8 h-8 bg-surface-700/60 hover:bg-surface-600/80 border border-surface-500/40 hover:border-red-400/50 rounded-lg text-surface-300 hover:text-red-400 transition-all duration-200 active:scale-95">
+                <svg id="icon-reset" class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+                  <polyline points="1 4 1 10 7 10"></polyline>
+                  <path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"></path>
+                </svg>
+                <svg id="icon-reset-check" class="w-4 h-4 hidden text-green-400" fill="none" stroke="currentColor" stroke-width="2.5" viewBox="0 0 24 24" aria-hidden="true">
+                  <polyline points="20 6 9 17 4 12"></polyline>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Editor Window -->
+          <div class="rounded-xl overflow-hidden border border-surface-500/40 shadow-2xl shadow-black/30">
+            <!-- Title bar -->
+            <div class="flex items-center justify-between px-4 py-2.5 bg-surface-800 border-b border-surface-500/30">
+              <div class="flex items-center gap-2">
+                <div class="editor-dot bg-[#ff5f57]"></div>
+                <div class="editor-dot bg-[#febc2e]"></div>
+                <div class="editor-dot bg-[#28c840]"></div>
+              </div>
+              <span class="text-xs text-surface-300 font-mono" id="editor-filename">docker-compose.yml</span>
+              <div class="w-14"></div>
+            </div>
+            <!-- Code area -->
+            <div class="bg-surface-950 overflow-x-auto code-scroll" style="min-height:300px">
+              <div class="p-5 font-mono text-[13px] leading-relaxed" id="output" role="tabpanel" aria-labelledby="tab-compose" tabindex="0"></div>
+            </div>
+          </div>
+
+          <!-- Helpful note -->
+          <div class="mt-4 flex items-start gap-2.5 text-xs text-surface-300">
+            <svg class="w-4 h-4 text-surface-400 flex-shrink-0 mt-0.5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="10"></circle>
+              <line x1="12" y1="16" x2="12" y2="12"></line>
+              <line x1="12" y1="8" x2="12.01" y2="8"></line>
+            </svg>
+            <p id="helpful-note"></p>
+          </div>
+
+          <!-- role="status" implies aria-live="polite" — correct severity
+               for "Configuration copied" and similar non-urgent feedback. -->
+          <div id="copy-status" class="sr-only" role="status"></div>
+        </div>
+      </div>
+
+    </div>
+
+  </main>
+
+
+<!-- Template cloned by main.ts when the user clicks "Add mount" or when URL
+     state hydrates extra volume rows. Keeping the markup here means the
+     row styling stays alongside the static form elements; no Tailwind
+     class strings live inside JS. -->
+<template id="extra-vol-template">
+  <div class="extra-vol-row border-t border-surface-500/30 pt-4">
+    <div class="flex items-center justify-between mb-2">
+      <span class="text-sm font-medium text-white">Additional mount</span>
+      <button type="button" aria-label="Remove volume mount" data-tooltip="Remove volume mount" data-action="remove"
+              class="inline-flex items-center justify-center w-8 h-8 text-surface-300 hover:text-red-400 transition-colors duration-200 rounded">
+        <svg class="w-4 h-4" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M18 6L6 18M6 6l12 12"></path>
+        </svg>
+      </button>
+    </div>
+    <div class="flex gap-2">
+      <input type="text" placeholder="/host/path" aria-label="Additional mount — host path"
+             class="extra-vol-host flex-1 px-3 py-2 bg-surface-700 border border-surface-500/50 rounded-lg text-sm font-mono text-slate-200 focus:border-roon-400 focus:ring-1 focus:ring-roon-300 transition-colors duration-200 outline-none">
+      <span class="self-center text-surface-300 text-sm flex-shrink-0" aria-hidden="true">:</span>
+      <input type="text" placeholder="/container/path" aria-label="Additional mount — container path"
+             class="extra-vol-container flex-1 px-3 py-2 bg-surface-700 border border-surface-500/50 rounded-lg text-sm font-mono text-slate-200 focus:border-roon-400 focus:ring-1 focus:ring-roon-300 transition-colors duration-200 outline-none">
+    </div>
+    <p class="extra-vol-warning text-xs text-amber-400 mt-1.5 hidden" aria-live="polite"></p>
+  </div>
+</template>
+
+<script type="module" src="/src/main.ts"></script>
+</body>
+</html>

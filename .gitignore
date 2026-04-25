@@ -2,3 +2,4 @@
 ImageJournal.md
 docker-compose*.yml
 qnap.docker.*.txt
+.playwright-mcp/

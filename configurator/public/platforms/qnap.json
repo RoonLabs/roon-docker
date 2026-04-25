@@ -1,0 +1,10 @@
+{
+  "id": "qnap",
+  "label": "QNAP",
+  "roon": "/share/Container/roon",
+  "music": "/share/Music",
+  "backup": "/share/Container/roon-backups",
+  "prefix": "/share/",
+  "hint": "Paths set for QNAP. Container Station stores app data under /share/Container/.",
+  "rootPattern": "^/share/"
+}

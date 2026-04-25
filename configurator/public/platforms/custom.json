@@ -1,0 +1,9 @@
+{
+  "id": "custom",
+  "label": "Custom",
+  "roon": "/path/to/roon",
+  "music": "/path/to/music",
+  "backup": "/path/to/roon-backups",
+  "prefix": "",
+  "hint": "Placeholder paths — replace with real host paths before running."
+}
