@@ -72,7 +72,7 @@ else
     # where a newline or trailing space sneaks in; internal whitespace
     # (e.g., "Early Access") still errors out since it's a distinct class
     # of typo.
-    ROON_INSTALL_BRANCH="$(echo "$ROON_INSTALL_BRANCH" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')"
+    ROON_INSTALL_BRANCH="$(printf '%s' "$ROON_INSTALL_BRANCH" | sed 's/^[[:space:]]*//; s/[[:space:]]*$//' | tr '[:upper:]' '[:lower:]')"
     ROON_INSTALL_BRANCH="${ROON_INSTALL_BRANCH:-production}"
 
     case "$ROON_INSTALL_BRANCH" in

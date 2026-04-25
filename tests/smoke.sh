@@ -94,7 +94,7 @@ check "/etc/roon-image-version has real content" \
 FILE_VERSION=$(docker run --rm --entrypoint cat "$IMAGE" /etc/roon-image-version 2>/dev/null || echo '')
 LABEL_VERSION=$(docker inspect "$IMAGE" --format '{{ index .Config.Labels "org.opencontainers.image.version" }}' 2>/dev/null || echo '')
 check "image-version file matches OCI version label (file=$FILE_VERSION label=$LABEL_VERSION)" \
-    test -n "$FILE_VERSION" -a "$FILE_VERSION" = "$LABEL_VERSION"
+    sh -c '[ -n "$1" ] && [ "$1" = "$2" ]' _ "$FILE_VERSION" "$LABEL_VERSION"
 
 # ─── OCI labels ──────────────────────────────────────────────────
 # The Dockerfile sets 10 OCI image labels. Missing any of them at runtime

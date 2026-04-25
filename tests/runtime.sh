@@ -49,18 +49,24 @@ CLEANUP_CONTAINERS=()
 CLEANUP_DIRS=()
 
 cleanup() {
-    # The `${arr+"${arr[@]}"}` form expands to nothing when the array has
-    # never been assigned *or* is empty, avoiding "unbound variable" under
-    # bash 3.2 + set -u (macOS /bin/bash). Bash 4.4+ handles empty arrays
-    # cleanly; this keeps local test runs working on stock macOS too.
+    # Size-gate iteration: under bash 3.2 + set -u (macOS /bin/bash),
+    # "${arr[@]}" on a declared-but-empty array errors with "unbound
+    # variable". `${#arr[@]}` is always defined and returns 0 for empty,
+    # so we guard the loop and use the properly-quoted expansion inside
+    # (preserves paths containing spaces — a real concern on macOS where
+    # $HOME may have a space in it).
     local c
-    for c in ${CLEANUP_CONTAINERS+"${CLEANUP_CONTAINERS[@]}"}; do
-        docker rm -f "$c" >/dev/null 2>&1 || true
-    done
+    if [ "${#CLEANUP_CONTAINERS[@]}" -gt 0 ]; then
+        for c in "${CLEANUP_CONTAINERS[@]}"; do
+            docker rm -f "$c" >/dev/null 2>&1 || true
+        done
+    fi
     local d
-    for d in ${CLEANUP_DIRS+"${CLEANUP_DIRS[@]}"}; do
-        rm -rf "$d" 2>/dev/null || true
-    done
+    if [ "${#CLEANUP_DIRS[@]}" -gt 0 ]; then
+        for d in "${CLEANUP_DIRS[@]}"; do
+            rm -rf "$d" 2>/dev/null || true
+        done
+    fi
 }
 trap cleanup EXIT
 
