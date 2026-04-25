@@ -14,8 +14,6 @@ Use the **[Docker Setup Guide](https://roonlabs.github.io/roon-docker/)** to gen
 
 On first start, the container downloads and installs RoonServer automatically. Subsequent starts skip the download and launch immediately.
 
-Setting the environment variable `ROON_DOWNLOAD_URL` will allow you to specify a custom RoonServer download URL, which can be useful if you have a local mirror of a RoonServer install tarball. By default, the image uses the official RoonServer download URL from Roon Labs. Example: `-e ROON_DOWNLOAD_URL=https://my-mirror.local/roonserver.tar.gz`.
-
 
 ## Requirements
 

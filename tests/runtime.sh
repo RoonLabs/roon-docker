@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Starts the container and validates the download/install/startup flow.
-# Covers fresh installs, branch switches in BOTH directions, sticky-branch
-# behavior (unset env keeps installed branch), and restart skipping.
+# Covers fresh installs, branch switches in BOTH directions, restart
+# skipping, auto-downgrade when env unset, and ROON_DOWNLOAD_URL override.
 #
 # Downloads ~200MB per branch from download.roonlabs.net.
 #
@@ -276,7 +276,7 @@ check "fresh EA: logs show earlyaccess branch" \
     grep -q "^Branch: earlyaccess" "$ROON_DIR/ea-fresh.log"
 
 check "fresh EA: logs show fresh-install decision" \
-    grep -q "fresh install" "$ROON_DIR/ea-fresh.log"
+    grep -q "No install present; installing branch 'earlyaccess'" "$ROON_DIR/ea-fresh.log"
 
 docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 
@@ -308,8 +308,8 @@ docker logs "$CONTAINER" > "$ROON_DIR/switch.log" 2>&1 || true
 check "prod→EA: logs show branch change detected" \
     grep -q "Branch change detected: production -> earlyaccess" "$ROON_DIR/switch.log"
 
-check "prod→EA: logs show removing old binaries" \
-    grep -q "Removing old RoonServer binaries" "$ROON_DIR/switch.log"
+check "prod→EA: extraction ran (clean reinstall)" \
+    grep -q "^Extracting to " "$ROON_DIR/switch.log"
 
 check "prod→EA: VERSION last line is earlyaccess" \
     sh -c '[ "$(tail -1 "$1")" = "earlyaccess" ]' _ "$ROON_DIR/app/RoonServer/VERSION"
@@ -394,8 +394,11 @@ docker logs "$CONTAINER" > "$ROON_DIR/restart.log" 2>&1 || true
 check "restart does not re-download (no Extracting line)" \
     sh -c '! grep -q "^Extracting to " "$1"' _ "$ROON_DIR/restart.log"
 
-check "restart logs sticky-branch message" \
-    grep -q "keeping installed branch 'production'" "$ROON_DIR/restart.log"
+# Unset env defaults to production. With production installed, the requested
+# and installed branches match, so the entrypoint logs "no reinstall needed"
+# rather than triggering a download.
+check "restart logs 'no reinstall needed'" \
+    grep -q "matches requested branch; no reinstall needed" "$ROON_DIR/restart.log"
 
 check "restart logs branch" \
     grep -q "^Branch: production" "$ROON_DIR/restart.log"
@@ -416,16 +419,19 @@ check "explicit same-branch: logs 'no reinstall needed'" \
 
 docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 
-# ─── Sticky earlyaccess: unset env keeps EA install ───────────
+# ─── Auto-downgrade: unset env reinstalls as production ──────────
 #
-# Closes a decision-table coverage gap: "unset env + existing earlyaccess
-# VERSION" should keep earlyaccess running, not silently revert to the
-# image-default branch (production).
+# ROON_INSTALL_BRANCH defaults to production when unset. If a user
+# previously installed earlyaccess explicitly and then removes the env
+# var on restart, the entrypoint reinstalls as production. This is the
+# opposite of the previous "sticky-branch" behavior, chosen for clarity:
+# the env var works like every other configurable (a default that can be
+# overridden) rather than having state-dependent meaning.
 
 echo ""
-echo "=== Runtime tests (sticky earlyaccess): $IMAGE ==="
+echo "=== Runtime tests (auto-downgrade EA → production on unset env): $IMAGE ==="
 
-CONTAINER="roon-runtime-sticky-ea"
+CONTAINER="roon-runtime-auto-downgrade"
 ROON_DIR="$(mktemp_roon_dir)"
 CLEANUP_DIRS+=("$ROON_DIR")
 echo "    Temp dir: $ROON_DIR"
@@ -436,25 +442,79 @@ wait_for_install "$ROON_DIR"
 docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 docker rm -f "$CONTAINER" 2>/dev/null || true
 
-# Restart WITHOUT the env var — should stay on EA, not reinstall as production
+# Restart WITHOUT the env var — should auto-reinstall as production
 start_container "$CONTAINER" "$ROON_DIR"
-wait_for_log "$CONTAINER" "^Branch: earlyaccess"
-docker logs "$CONTAINER" > "$ROON_DIR/sticky-ea.log" 2>&1 || true
+wait_for_branch "$ROON_DIR" "production"
+wait_for_log "$CONTAINER" "^Branch: production"
+docker logs "$CONTAINER" > "$ROON_DIR/auto-downgrade.log" 2>&1 || true
 
-check "sticky EA: keeps earlyaccess install" \
-    sh -c '[ "$(tail -1 "$1")" = "earlyaccess" ]' _ "$ROON_DIR/app/RoonServer/VERSION"
+check "auto-downgrade: VERSION last line is production" \
+    sh -c '[ "$(tail -1 "$1")" = "production" ]' _ "$ROON_DIR/app/RoonServer/VERSION"
 
-check "sticky EA: does not re-download" \
-    sh -c '! grep -q "^Extracting to " "$1"' _ "$ROON_DIR/sticky-ea.log"
+check "auto-downgrade: logs branch change detected" \
+    grep -q "Branch change detected: earlyaccess -> production" "$ROON_DIR/auto-downgrade.log"
 
-check "sticky EA: logs 'keeping installed branch'" \
-    grep -q "keeping installed branch 'earlyaccess'" "$ROON_DIR/sticky-ea.log"
+check "auto-downgrade: logs Branch: production" \
+    grep -q "^Branch: production" "$ROON_DIR/auto-downgrade.log"
 
-check "sticky EA: logs actionable switch hint" \
-    grep -q "To switch branches, set ROON_INSTALL_BRANCH" "$ROON_DIR/sticky-ea.log"
+docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 
-check "sticky EA: logs Branch: earlyaccess" \
-    grep -q "^Branch: earlyaccess" "$ROON_DIR/sticky-ea.log"
+# ─── ROON_DOWNLOAD_URL override ──────────────────────────────────
+#
+# When ROON_DOWNLOAD_URL is set, it takes precedence over ROON_INSTALL_BRANCH.
+# Two paths to verify:
+#   (1) Fresh install with custom URL → uses URL, doesn't derive from branch.
+#   (2) Existing install + custom URL → does NOT trigger a reinstall, even if
+#       ROON_INSTALL_BRANCH disagrees with the installed branch.
+
+echo ""
+echo "=== Runtime tests (ROON_DOWNLOAD_URL override): $IMAGE ==="
+
+# Path 1: fresh install — URL points at the production tarball, but we set
+# ROON_INSTALL_BRANCH=earlyaccess to prove the URL wins. The installed
+# binary should be production (last line of VERSION).
+CONTAINER="roon-runtime-url-override-fresh"
+ROON_DIR="$(mktemp_roon_dir)"
+CLEANUP_DIRS+=("$ROON_DIR")
+echo "    Temp dir: $ROON_DIR"
+
+PROD_URL="https://download.roonlabs.net/builds/production/RoonServer_linuxx64.tar.bz2"
+start_container "$CONTAINER" "$ROON_DIR" \
+    -e ROON_INSTALL_BRANCH=earlyaccess \
+    -e ROON_DOWNLOAD_URL="$PROD_URL"
+wait_for_install "$ROON_DIR"
+wait_for_log "$CONTAINER" "^Branch: production"
+docker logs "$CONTAINER" > "$ROON_DIR/url-override-fresh.log" 2>&1 || true
+
+check "URL override (fresh): logs custom URL message" \
+    grep -q "Custom ROON_DOWNLOAD_URL set; performing fresh install" "$ROON_DIR/url-override-fresh.log"
+
+check "URL override (fresh): VERSION reflects URL content (production)" \
+    sh -c '[ "$(tail -1 "$1")" = "production" ]' _ "$ROON_DIR/app/RoonServer/VERSION"
+
+check "URL override (fresh): final Branch log reflects actual install" \
+    grep -q "^Branch: production" "$ROON_DIR/url-override-fresh.log"
+
+docker stop -t 10 "$CONTAINER" 2>/dev/null || true
+docker rm -f "$CONTAINER" 2>/dev/null || true
+
+# Path 2: existing install with mismatched env var. Restart with
+# ROON_DOWNLOAD_URL set and ROON_INSTALL_BRANCH=earlyaccess; the URL
+# override should suppress the branch-change reinstall logic.
+start_container "$CONTAINER" "$ROON_DIR" \
+    -e ROON_INSTALL_BRANCH=earlyaccess \
+    -e ROON_DOWNLOAD_URL="$PROD_URL"
+wait_for_log "$CONTAINER" "^Branch: production"
+docker logs "$CONTAINER" > "$ROON_DIR/url-override-existing.log" 2>&1 || true
+
+check "URL override (existing): logs custom URL using existing install" \
+    grep -q "Custom ROON_DOWNLOAD_URL set; using existing install" "$ROON_DIR/url-override-existing.log"
+
+check "URL override (existing): no re-extract" \
+    sh -c '! grep -q "^Extracting to " "$1"' _ "$ROON_DIR/url-override-existing.log"
+
+check "URL override (existing): no branch-change reinstall" \
+    sh -c '! grep -q "Branch change detected" "$1"' _ "$ROON_DIR/url-override-existing.log"
 
 docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 

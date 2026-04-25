@@ -139,21 +139,21 @@ MIXED_EXIT=0
 MIXED_OUTPUT=$(docker run --rm -e ROON_INSTALL_BRANCH=EarlyAccess -e ROON_DOWNLOAD_URL=http://localhost:1 -v "$MIXED_TMP:/Roon" "$IMAGE" 2>&1) || MIXED_EXIT=$?
 rm -rf "$MIXED_TMP"
 check "mixed-case ROON_INSTALL_BRANCH: accepted (resolves to earlyaccess)" \
-    sh -c 'echo "$1" | grep -qF "Requested branch '\''earlyaccess'\''"' _ "$MIXED_OUTPUT"
+    sh -c 'echo "$1" | grep -qF "Resolved ROON_INSTALL_BRANCH='\''earlyaccess'\''"' _ "$MIXED_OUTPUT"
 
 EMPTY_TMP=$(mktemp -d)
 EMPTY_EXIT=0
 EMPTY_OUTPUT=$(docker run --rm -e ROON_INSTALL_BRANCH= -e ROON_DOWNLOAD_URL=http://localhost:1 -v "$EMPTY_TMP:/Roon" "$IMAGE" 2>&1) || EMPTY_EXIT=$?
 rm -rf "$EMPTY_TMP"
 check "empty ROON_INSTALL_BRANCH: defaults to production" \
-    sh -c 'echo "$1" | grep -qF "Requested branch '\''production'\''"' _ "$EMPTY_OUTPUT"
+    sh -c 'echo "$1" | grep -qF "Resolved ROON_INSTALL_BRANCH='\''production'\''"' _ "$EMPTY_OUTPUT"
 
 EXPLICIT_TMP=$(mktemp -d)
 EXPLICIT_EXIT=0
 EXPLICIT_OUTPUT=$(docker run --rm -e ROON_INSTALL_BRANCH=production -e ROON_DOWNLOAD_URL=http://localhost:1 -v "$EXPLICIT_TMP:/Roon" "$IMAGE" 2>&1) || EXPLICIT_EXIT=$?
 rm -rf "$EXPLICIT_TMP"
 check "explicit ROON_INSTALL_BRANCH=production: resolves correctly" \
-    sh -c 'echo "$1" | grep -qF "Requested branch '\''production'\''"' _ "$EXPLICIT_OUTPUT"
+    sh -c 'echo "$1" | grep -qF "Resolved ROON_INSTALL_BRANCH='\''production'\''"' _ "$EXPLICIT_OUTPUT"
 
 # Whitespace tolerance: leading, trailing, and newline variants should
 # normalize to the clean value. Copy-paste from YAML or docker-run command
@@ -163,19 +163,19 @@ LEAD_TMP=$(mktemp -d)
 LEAD_OUTPUT=$(docker run --rm -e "ROON_INSTALL_BRANCH= earlyaccess" -e ROON_DOWNLOAD_URL=http://localhost:1 -v "$LEAD_TMP:/Roon" "$IMAGE" 2>&1) || true
 rm -rf "$LEAD_TMP"
 check "leading whitespace in ROON_INSTALL_BRANCH: stripped" \
-    sh -c 'echo "$1" | grep -qF "Requested branch '\''earlyaccess'\''"' _ "$LEAD_OUTPUT"
+    sh -c 'echo "$1" | grep -qF "Resolved ROON_INSTALL_BRANCH='\''earlyaccess'\''"' _ "$LEAD_OUTPUT"
 
 TRAIL_TMP=$(mktemp -d)
 TRAIL_OUTPUT=$(docker run --rm -e "ROON_INSTALL_BRANCH=earlyaccess  " -e ROON_DOWNLOAD_URL=http://localhost:1 -v "$TRAIL_TMP:/Roon" "$IMAGE" 2>&1) || true
 rm -rf "$TRAIL_TMP"
 check "trailing whitespace in ROON_INSTALL_BRANCH: stripped" \
-    sh -c 'echo "$1" | grep -qF "Requested branch '\''earlyaccess'\''"' _ "$TRAIL_OUTPUT"
+    sh -c 'echo "$1" | grep -qF "Resolved ROON_INSTALL_BRANCH='\''earlyaccess'\''"' _ "$TRAIL_OUTPUT"
 
 NEWLINE_TMP=$(mktemp -d)
 NEWLINE_OUTPUT=$(docker run --rm -e "ROON_INSTALL_BRANCH=$(printf 'earlyaccess\n')" -e ROON_DOWNLOAD_URL=http://localhost:1 -v "$NEWLINE_TMP:/Roon" "$IMAGE" 2>&1) || true
 rm -rf "$NEWLINE_TMP"
 check "trailing newline in ROON_INSTALL_BRANCH: stripped" \
-    sh -c 'echo "$1" | grep -qF "Requested branch '\''earlyaccess'\''"' _ "$NEWLINE_OUTPUT"
+    sh -c 'echo "$1" | grep -qF "Resolved ROON_INSTALL_BRANCH='\''earlyaccess'\''"' _ "$NEWLINE_OUTPUT"
 
 # Internal whitespace is still a user error — don't silently merge tokens.
 INTERNAL_TMP=$(mktemp -d)
@@ -185,13 +185,18 @@ rm -rf "$INTERNAL_TMP"
 check "internal whitespace in ROON_INSTALL_BRANCH: still rejected" \
     test "$INTERNAL_EXIT" -ne 0
 
-# Unset ROON_INSTALL_BRANCH with no VERSION file → defaults to production
+# Unset ROON_INSTALL_BRANCH with no VERSION file → defaults to production.
+# Note: setting ROON_DOWNLOAD_URL here also activates the URL-override path
+# (because both are unset/derived from defaults), so the entrypoint logs
+# the custom-URL fresh-install message rather than the branch-derived one.
 UNSET_TMP=$(mktemp -d)
 UNSET_EXIT=0
 UNSET_OUTPUT=$(docker run --rm -e ROON_DOWNLOAD_URL=http://localhost:1 -v "$UNSET_TMP:/Roon" "$IMAGE" 2>&1) || UNSET_EXIT=$?
 rm -rf "$UNSET_TMP"
-check "unset ROON_INSTALL_BRANCH + no install: uses default branch 'production'" \
-    sh -c 'echo "$1" | grep -qF "using default branch '\''production'\''"' _ "$UNSET_OUTPUT"
+check "unset ROON_INSTALL_BRANCH + custom URL + no install: fresh-install path" \
+    sh -c 'echo "$1" | grep -q "Custom ROON_DOWNLOAD_URL set; performing fresh install"' _ "$UNSET_OUTPUT"
+check "unset ROON_INSTALL_BRANCH defaults to production" \
+    sh -c 'echo "$1" | grep -qF "Resolved ROON_INSTALL_BRANCH='\''production'\''"' _ "$UNSET_OUTPUT"
 
 # Empty VERSION file (corrupt prior install) → entrypoint should NOT log
 # "Detected existing install (branch: )" with a blank, and should fall
@@ -231,14 +236,16 @@ check "whitespace-only VERSION file: treated as empty" \
 # Multi-line VERSION: branch is on the LAST line (tail -1), not the first.
 # Pins the contract against a refactor to head/sed '1p'/etc. Pre-seed a
 # VERSION whose first line says "earlyaccess" and last line says
-# "production"; the entrypoint's sticky-branch path should keep production.
+# "production"; the entrypoint should detect production from VERSION.
+# Use ROON_DOWNLOAD_URL=http://localhost:1 so the entrypoint takes the
+# URL-override path (no branch-derived URL fetch attempt).
 MULTI_VER_TMP=$(mktemp -d)
 docker run --rm --entrypoint sh -v "$MULTI_VER_TMP:/Roon" "$IMAGE" \
     -c 'mkdir -p /Roon/app/RoonServer && printf "earlyaccess\n9999\nproduction\n" > /Roon/app/RoonServer/VERSION' >/dev/null
 MULTI_VER_OUTPUT=$(docker run --rm -e ROON_DOWNLOAD_URL=http://localhost:1 -v "$MULTI_VER_TMP:/Roon" "$IMAGE" 2>&1) || true
 rm -rf "$MULTI_VER_TMP" 2>/dev/null || true
-check "multi-line VERSION: last line wins (sticky keeps production)" \
-    sh -c 'echo "$1" | grep -qF "keeping installed branch '\''production'\''"' _ "$MULTI_VER_OUTPUT"
+check "multi-line VERSION: last line wins (detects production)" \
+    sh -c 'echo "$1" | grep -qF "Detected existing RoonServer install (branch: production)"' _ "$MULTI_VER_OUTPUT"
 
 # Image runs as root by default (no USER directive). TrueNAS deployments
 # need `user: "0:0"` override because TrueNAS Apps defaults containers to
