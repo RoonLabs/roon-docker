@@ -1,0 +1,87 @@
+name: Deploy Configurator to Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'configurator/**'
+      - '.github/workflows/pages.yml'
+  pull_request:
+    paths:
+      - 'configurator/**'
+      - '.github/workflows/pages.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# PR pushes cancel each other (avoid wasting runners on stale commits);
+# main-branch runs queue serially under the shared `pages` group so
+# Pages deploys never overlap.
+concurrency:
+  group: ${{ github.event_name == 'pull_request' && format('pages-pr-{0}', github.ref) || 'pages' }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: configurator
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          # Pinned to 20.19.0 (not bare '20') because vite@8 declares
+          # engines.node = '^20.19.0 || >=22.12.0'. A runner image stuck on
+          # an earlier 20.x would fail npm ci with EBADENGINE.
+          node-version: '20.19.0'
+          cache: 'npm'
+          cache-dependency-path: configurator/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Test (unit)
+        run: npm test
+
+      - name: Install Playwright browser
+        run: npx playwright install --with-deps chromium
+
+      - name: Test (e2e)
+        run: npm run test:e2e
+
+      - name: Build
+        run: npm run build
+
+      - name: Upload Pages artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: configurator/dist
+
+      - name: Upload Playwright report
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-report
+          path: configurator/playwright-report
+          retention-days: 7
+
+  deploy:
+    # Only deploy on push-to-main; PR runs validate the build but must not
+    # publish a PR's contents to the live site.
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4
