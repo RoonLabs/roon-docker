@@ -254,6 +254,74 @@ check "multi-line VERSION: last line wins (detects production)" \
 check "image has no USER directive (runs as root)" \
     sh -c '[ -z "$(docker inspect --format "{{.Config.User}}" "$1")" ]' _ "$IMAGE"
 
+# In-container update compatibility: entrypoint must patch start.sh's bare
+# `tar xf` to use --no-same-owner --no-same-permissions, otherwise upgrades
+# fail on userns-remap / NFS-root_squash / strict-ACL hosts because tar
+# tries to chown extracted files to the build-agent uid (1001) and exits
+# non-zero on chown failure.
+#
+# Pre-seed a fake RoonServer install with start.sh containing the upstream
+# bare-tar pattern, plus a Server/RoonServer launcher and VERSION file so
+# the entrypoint takes the "no reinstall needed" path. Replace the
+# entrypoint's exec target with `:` (the no-op shell builtin) by also
+# providing a fake start.sh that just exits — but we want to inspect
+# start.sh after the patch step, so we use --entrypoint sh to bypass
+# entrypoint.sh entirely on the second run and just read the file.
+PATCH_TMP=$(mktemp -d)
+docker run --rm --entrypoint sh -v "$PATCH_TMP:/Roon" "$IMAGE" -c '
+mkdir -p /Roon/app/RoonServer/Server
+cat > /Roon/app/RoonServer/start.sh <<'\''EOF'\''
+#!/bin/bash
+if [ "$1" = "--update" ]; then
+    PKG="$2"; ROOTDIR="$3"
+    tar xf "$PKG" -C "$ROOTDIR/.update.tmp"
+fi
+exit 0
+EOF
+chmod +x /Roon/app/RoonServer/start.sh
+touch /Roon/app/RoonServer/Server/RoonServer
+printf "100\nproduction\n" > /Roon/app/RoonServer/VERSION
+' >/dev/null
+
+# Run the entrypoint — should detect existing install (no reinstall),
+# patch start.sh, then exec it (which exits 0 thanks to our fake script).
+PATCH_LOG=$(docker run --rm -e ROON_INSTALL_BRANCH=production -v "$PATCH_TMP:/Roon" "$IMAGE" 2>&1) || true
+
+# Read the (possibly-patched) start.sh from inside the container so the
+# test doesn't depend on host file-sharing config (Docker Desktop on
+# macOS doesn't share /var/folders by default).
+PATCHED_SH=$(docker run --rm --entrypoint cat -v "$PATCH_TMP:/Roon" "$IMAGE" /Roon/app/RoonServer/start.sh 2>&1)
+rm -rf "$PATCH_TMP" 2>/dev/null || true
+
+check "start.sh patch: tar invocation gets --no-same-owner + --no-same-permissions" \
+    sh -c 'echo "$1" | grep -qF "tar xf --no-same-owner --no-same-permissions \"\$PKG\""' _ "$PATCHED_SH"
+check "start.sh patch: idempotent (only one set of flags after patching)" \
+    sh -c '[ "$(echo "$1" | grep -c -- --no-same-owner)" -eq 1 ]' _ "$PATCHED_SH"
+check "start.sh patch: log message is emitted on patching" \
+    sh -c 'echo "$1" | grep -q "Patched RoonServer/start.sh"' _ "$PATCH_LOG"
+
+# Idempotency check on a second run: PATCH_TMP was deleted, so re-seed
+# with an already-patched start.sh and verify the entrypoint is a no-op.
+PATCH_TMP2=$(mktemp -d)
+docker run --rm --entrypoint sh -v "$PATCH_TMP2:/Roon" "$IMAGE" -c '
+mkdir -p /Roon/app/RoonServer/Server
+cat > /Roon/app/RoonServer/start.sh <<'\''EOF'\''
+#!/bin/bash
+if [ "$1" = "--update" ]; then
+    tar xf --no-same-owner --no-same-permissions "$PKG" -C "$ROOTDIR/.update.tmp"
+fi
+exit 0
+EOF
+chmod +x /Roon/app/RoonServer/start.sh
+touch /Roon/app/RoonServer/Server/RoonServer
+printf "100\nproduction\n" > /Roon/app/RoonServer/VERSION
+' >/dev/null
+PATCH2_LOG=$(docker run --rm -e ROON_INSTALL_BRANCH=production -v "$PATCH_TMP2:/Roon" "$IMAGE" 2>&1) || true
+rm -rf "$PATCH_TMP2" 2>/dev/null || true
+
+check "start.sh patch: skipped (no log) when --no-same-owner already present" \
+    sh -c '! echo "$1" | grep -q "Patched RoonServer/start.sh"' _ "$PATCH2_LOG"
+
 # Startup banner is always emitted (regardless of branch resolution outcome)
 check "startup banner always logged" \
     sh -c 'echo "$1" | grep -q "^Roon Docker image "' _ "$UNSET_OUTPUT"

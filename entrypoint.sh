@@ -119,6 +119,33 @@ if [ "$NEEDS_INSTALL" = true ]; then
     echo "RoonServer installed successfully."
 fi
 
+# --- Patch start.sh for in-container update durability ---------------------
+# RoonServer's start.sh handles in-container upgrades by extracting a new
+# build tarball into RoonServer/.update.tmp/. The bundled script uses bare
+# `tar xf "$PKG"` (no --no-same-owner / --no-same-permissions), and the
+# build tarballs store files as uid 1001 (the Azure Pipelines build agent).
+# That combination fails on hosts with restricted chown semantics — userns-
+# remapped Docker daemons, NFS mounts with root_squash, TrueNAS bind
+# mounts with strict ACLs — because tar tries to chown extracted files
+# to a uid the host filesystem rejects, exits non-zero, and start.sh's
+# `|| doerror` catches the failure as "ERROR: failed to tar xf $PKG".
+# Result: initial install succeeds (entrypoint extract uses the right
+# flags); auto-updates silently fail.
+#
+# Fix the running on-disk start.sh to mirror our entrypoint extract flags.
+# Idempotent: skip when the flag is already present (avoids double-patches
+# on restart, and makes upstream's eventual fix a no-op here). Re-runs on
+# every container start so each upgrade — which replaces start.sh with
+# the unpatched upstream version — gets re-patched on the next restart.
+
+START_SH="${ROON_APP_DIR}/RoonServer/start.sh"
+if [ -f "$START_SH" ] && ! grep -q -- "--no-same-owner" "$START_SH"; then
+    if sed -i 's|tar xf "$PKG"|tar xf --no-same-owner --no-same-permissions "$PKG"|' "$START_SH" \
+       && grep -q -- "--no-same-owner" "$START_SH"; then
+        echo "Patched RoonServer/start.sh for in-container update compatibility."
+    fi
+fi
+
 # --- Final state log --------------------------------------------------------
 # Line format is contract-ish: runtime tests grep for "^Branch: production"
 # and "^Branch: earlyaccess". Don't change the prefix or spacing without
