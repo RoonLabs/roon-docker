@@ -139,9 +139,14 @@ fi
 # the unpatched upstream version — gets re-patched on the next restart.
 
 START_SH="${ROON_APP_DIR}/RoonServer/start.sh"
-if [ -f "$START_SH" ] && ! grep -q -- "--no-same-owner" "$START_SH"; then
+# Guard checks for BOTH flags so a partial upstream fix (e.g., owner added
+# but not permissions) still triggers the full patch attempt. Post-sed we
+# also verify both flags are present before logging success.
+if [ -f "$START_SH" ] && ! { grep -q -- "--no-same-owner" "$START_SH" \
+     && grep -q -- "--no-same-permissions" "$START_SH"; }; then
     if sed -i 's|tar xf "$PKG"|tar xf --no-same-owner --no-same-permissions "$PKG"|' "$START_SH" \
-       && grep -q -- "--no-same-owner" "$START_SH"; then
+       && grep -q -- "--no-same-owner" "$START_SH" \
+       && grep -q -- "--no-same-permissions" "$START_SH"; then
         echo "Patched RoonServer/start.sh for in-container update compatibility."
     fi
 fi

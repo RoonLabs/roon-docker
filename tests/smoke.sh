@@ -316,10 +316,15 @@ chmod +x /Roon/app/RoonServer/start.sh
 touch /Roon/app/RoonServer/Server/RoonServer
 printf "100\nproduction\n" > /Roon/app/RoonServer/VERSION
 ' >/dev/null
-PATCH2_LOG=$(docker run --rm -e ROON_INSTALL_BRANCH=production -v "$PATCH_TMP2:/Roon" "$IMAGE" 2>&1) || true
+PATCH2_EXIT=0
+PATCH2_LOG=$(docker run --rm -e ROON_INSTALL_BRANCH=production -v "$PATCH_TMP2:/Roon" "$IMAGE" 2>&1) || PATCH2_EXIT=$?
 rm -rf "$PATCH_TMP2" 2>/dev/null || true
 
-check "start.sh patch: skipped (no log) when --no-same-owner already present" \
+# Guard the negative assertion below: if the container failed to start
+# at all, the "no log" assertion would pass for the wrong reason.
+check "start.sh patch: idempotent run exits cleanly" \
+    test "$PATCH2_EXIT" -eq 0
+check "start.sh patch: skipped (no log) when both flags already present" \
     sh -c '! echo "$1" | grep -q "Patched RoonServer/start.sh"' _ "$PATCH2_LOG"
 
 # Startup banner is always emitted (regardless of branch resolution outcome)
