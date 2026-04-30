@@ -89,23 +89,14 @@ check() {
     fi
 }
 
-# Wait for VERSION file to appear (indicates RoonServer install complete).
+# Wait for RoonServer install to complete.
 # Returns non-zero on timeout so set -e halts the run — a download that
 # never completes is a test failure, not something to silently continue past.
 wait_for_install() {
     local dir="$1"
     local timeout="${2:-180}"
-    local elapsed=0
-    echo "    Waiting for RoonServer download..."
-    while [ ! -f "$dir/app/RoonServer/VERSION" ]; do
-        if [ "$elapsed" -ge "$timeout" ]; then
-            echo "    wait_for_install: timed out after ${timeout}s waiting for $dir/app/RoonServer/VERSION" >&2
-            return 1
-        fi
-        sleep 5
-        elapsed=$((elapsed + 5))
-        echo "    ... ${elapsed}s"
-    done
+    echo "    Waiting for RoonServer install to complete..."
+    wait_for_log "$CONTAINER" "RoonServer installed successfully" "$timeout"
 }
 
 # Wait for a specific branch to appear in the VERSION file's last line.
