@@ -31,7 +31,7 @@ test.describe('Initial state', () => {
     const values = await page
       .locator('#platform-select option')
       .evaluateAll((els) => els.map((e) => (e as HTMLOptionElement).value));
-    expect(values).toEqual(['qnap', 'synology', 'unraid', 'truenas', 'linux', 'custom']);
+    expect(values).toEqual(['qnap', 'synology', 'unraid', 'truenas', 'ugreen', 'linux', 'custom']);
   });
 
   test('Copy and Download are enabled with no input errors', async ({ page }) => {
