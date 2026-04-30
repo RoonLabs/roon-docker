@@ -45,7 +45,7 @@ test.describe('Platform switching', () => {
     await page.locator('#platform-select').selectOption('synology');
     await expect(page.locator('#vol-roon')).toHaveValue('/volume1/docker/roon');
     await expect(page.locator('#vol-music')).toHaveValue('/volume1/music');
-    await expect(page.locator('#vol-backup')).toHaveValue('/volume1/roon-backups');
+    await expect(page.locator('#vol-backup')).toHaveValue('/volume1/docker/roon-backups');
     expect(await getOutput(page)).toContain('- /volume1/music:/Music');
   });
 });

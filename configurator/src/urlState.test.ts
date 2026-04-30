@@ -16,7 +16,7 @@ const platforms: PlatformMap = {
     id: 'synology', label: 'Synology',
     roon: '/volume1/docker/roon',
     music: '/volume1/music',
-    backup: '/volume1/roon-backups',
+    backup: '/volume1/docker/roon-backups',
     prefix: '/volume1/',
     hint: '',
     rootPattern: '^/volume\\d+/',
@@ -66,7 +66,7 @@ describe('encode', () => {
     const cfg = baseConfig({
       volRoon: '/volume1/docker/roon',
       volMusic: '/volume1/music',
-      volBackup: '/volume1/roon-backups',
+      volBackup: '/volume1/docker/roon-backups',
     });
     const params = encode(cfg, 'synology', platforms, 'qnap');
     expect(params.get('p')).toBe('synology');
