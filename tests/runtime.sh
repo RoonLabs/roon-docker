@@ -89,27 +89,20 @@ check() {
     fi
 }
 
-# Wait for the production install to finish extracting the files that the
-# runtime assertions inspect. VERSION is written before the full tarball is
-# necessarily present, so using it as the only sentinel can race the launcher
-# and runtime-directory checks below.
-# Returns non-zero on timeout so set -e halts the run — a download/extraction
-# that never completes is a test failure, not something to silently continue past.
+# Wait for VERSION file to appear (indicates RoonServer install started).
+# Runtime tests that inspect the post-install state should also wait for the
+# entrypoint's final Branch log line, which preserves separation between
+# install-complete signaling and artifact assertions.
+# Returns non-zero on timeout so set -e halts the run — a download that
+# never completes is a test failure, not something to silently continue past.
 wait_for_install() {
     local dir="$1"
     local timeout="${2:-180}"
     local elapsed=0
-    local version="$dir/app/RoonServer/VERSION"
-    local launcher="$dir/app/RoonServer/Server/RoonServer"
-    local runtime="$dir/app/RoonServer/RoonDotnet"
-
-    echo "    Waiting for RoonServer download/extraction..."
-    while [ ! -f "$version" ] || [ ! -f "$launcher" ] || [ ! -d "$runtime" ]; do
+    echo "    Waiting for RoonServer download..."
+    while [ ! -f "$dir/app/RoonServer/VERSION" ]; do
         if [ "$elapsed" -ge "$timeout" ]; then
-            echo "    wait_for_install: timed out after ${timeout}s waiting for RoonServer install artifacts" >&2
-            echo "      VERSION:  $([ -f "$version" ] && echo present || echo missing)" >&2
-            echo "      Launcher: $([ -f "$launcher" ] && echo present || echo missing)" >&2
-            echo "      Runtime:  $([ -d "$runtime" ] && echo present || echo missing)" >&2
+            echo "    wait_for_install: timed out after ${timeout}s waiting for $dir/app/RoonServer/VERSION" >&2
             return 1
         fi
         sleep 5
@@ -205,7 +198,7 @@ echo "    Temp dir: $ROON_DIR"
 
 start_container "$CONTAINER" "$ROON_DIR"
 
-wait_for_install "$ROON_DIR"
+wait_for_log "$CONTAINER" "^Branch: production"
 
 check "VERSION file created" \
     test -f "$ROON_DIR/app/RoonServer/VERSION"
@@ -271,7 +264,7 @@ echo "    Temp dir: $ROON_DIR"
 
 start_container "$CONTAINER" "$ROON_DIR" -e ROON_INSTALL_BRANCH=earlyaccess
 
-wait_for_install "$ROON_DIR"
+wait_for_log "$CONTAINER" "^Branch: earlyaccess"
 
 check "fresh EA: VERSION file created" \
     test -f "$ROON_DIR/app/RoonServer/VERSION"
@@ -302,7 +295,7 @@ echo "    Temp dir: $ROON_DIR"
 
 # First: install production (no env var → default)
 start_container "$CONTAINER" "$ROON_DIR"
-wait_for_install "$ROON_DIR"
+wait_for_log "$CONTAINER" "^Branch: production"
 docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 docker rm -f "$CONTAINER" 2>/dev/null || true
 
@@ -354,7 +347,7 @@ echo "    Temp dir: $ROON_DIR"
 
 # First: install earlyaccess
 start_container "$CONTAINER" "$ROON_DIR" -e ROON_INSTALL_BRANCH=earlyaccess
-wait_for_install "$ROON_DIR"
+wait_for_log "$CONTAINER" "^Branch: earlyaccess"
 docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 docker rm -f "$CONTAINER" 2>/dev/null || true
 
@@ -390,7 +383,7 @@ echo "    Temp dir: $ROON_DIR"
 
 # Install production first
 start_container "$CONTAINER" "$ROON_DIR"
-wait_for_install "$ROON_DIR"
+wait_for_log "$CONTAINER" "^Branch: production"
 docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 docker rm -f "$CONTAINER" 2>/dev/null || true
 
@@ -448,7 +441,7 @@ echo "    Temp dir: $ROON_DIR"
 
 # Install EA first
 start_container "$CONTAINER" "$ROON_DIR" -e ROON_INSTALL_BRANCH=earlyaccess
-wait_for_install "$ROON_DIR"
+wait_for_log "$CONTAINER" "^Branch: earlyaccess"
 docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 docker rm -f "$CONTAINER" 2>/dev/null || true
 
@@ -492,7 +485,6 @@ PROD_URL="https://download.roonlabs.net/builds/production/RoonServer_linuxx64.ta
 start_container "$CONTAINER" "$ROON_DIR" \
     -e ROON_INSTALL_BRANCH=earlyaccess \
     -e ROON_DOWNLOAD_URL="$PROD_URL"
-wait_for_install "$ROON_DIR"
 wait_for_log "$CONTAINER" "^Branch: production"
 docker logs "$CONTAINER" > "$ROON_DIR/url-override-fresh.log" 2>&1 || true
 
