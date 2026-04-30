@@ -89,17 +89,27 @@ check() {
     fi
 }
 
-# Wait for VERSION file to appear (indicates RoonServer install complete).
-# Returns non-zero on timeout so set -e halts the run — a download that
-# never completes is a test failure, not something to silently continue past.
+# Wait for the production install to finish extracting the files that the
+# runtime assertions inspect. VERSION is written before the full tarball is
+# necessarily present, so using it as the only sentinel can race the launcher
+# and runtime-directory checks below.
+# Returns non-zero on timeout so set -e halts the run — a download/extraction
+# that never completes is a test failure, not something to silently continue past.
 wait_for_install() {
     local dir="$1"
     local timeout="${2:-180}"
     local elapsed=0
-    echo "    Waiting for RoonServer download..."
-    while [ ! -f "$dir/app/RoonServer/VERSION" ]; do
+    local version="$dir/app/RoonServer/VERSION"
+    local launcher="$dir/app/RoonServer/Server/RoonServer"
+    local runtime="$dir/app/RoonServer/RoonDotnet"
+
+    echo "    Waiting for RoonServer download/extraction..."
+    while [ ! -f "$version" ] || [ ! -f "$launcher" ] || [ ! -d "$runtime" ]; do
         if [ "$elapsed" -ge "$timeout" ]; then
-            echo "    wait_for_install: timed out after ${timeout}s waiting for $dir/app/RoonServer/VERSION" >&2
+            echo "    wait_for_install: timed out after ${timeout}s waiting for RoonServer install artifacts" >&2
+            echo "      VERSION:  $([ -f "$version" ] && echo present || echo missing)" >&2
+            echo "      Launcher: $([ -f "$launcher" ] && echo present || echo missing)" >&2
+            echo "      Runtime:  $([ -d "$runtime" ] && echo present || echo missing)" >&2
             return 1
         fi
         sleep 5
