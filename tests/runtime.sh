@@ -93,8 +93,7 @@ check() {
 # Returns non-zero on timeout so set -e halts the run — a download that
 # never completes is a test failure, not something to silently continue past.
 wait_for_install() {
-    local dir="$1"
-    local timeout="${2:-180}"
+    local timeout="${1:-180}"
     echo "    Waiting for RoonServer install to complete..."
     wait_for_log "$CONTAINER" "RoonServer installed successfully" "$timeout"
 }
@@ -186,7 +185,7 @@ echo "    Temp dir: $ROON_DIR"
 
 start_container "$CONTAINER" "$ROON_DIR"
 
-wait_for_install "$ROON_DIR"
+wait_for_install
 
 check "VERSION file created" \
     test -f "$ROON_DIR/app/RoonServer/VERSION"
@@ -252,7 +251,7 @@ echo "    Temp dir: $ROON_DIR"
 
 start_container "$CONTAINER" "$ROON_DIR" -e ROON_INSTALL_BRANCH=earlyaccess
 
-wait_for_install "$ROON_DIR"
+wait_for_install
 
 check "fresh EA: VERSION file created" \
     test -f "$ROON_DIR/app/RoonServer/VERSION"
@@ -283,7 +282,7 @@ echo "    Temp dir: $ROON_DIR"
 
 # First: install production (no env var → default)
 start_container "$CONTAINER" "$ROON_DIR"
-wait_for_install "$ROON_DIR"
+wait_for_install
 docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 docker rm -f "$CONTAINER" 2>/dev/null || true
 
@@ -335,7 +334,7 @@ echo "    Temp dir: $ROON_DIR"
 
 # First: install earlyaccess
 start_container "$CONTAINER" "$ROON_DIR" -e ROON_INSTALL_BRANCH=earlyaccess
-wait_for_install "$ROON_DIR"
+wait_for_install
 docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 docker rm -f "$CONTAINER" 2>/dev/null || true
 
@@ -371,7 +370,7 @@ echo "    Temp dir: $ROON_DIR"
 
 # Install production first
 start_container "$CONTAINER" "$ROON_DIR"
-wait_for_install "$ROON_DIR"
+wait_for_install
 docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 docker rm -f "$CONTAINER" 2>/dev/null || true
 
@@ -429,7 +428,7 @@ echo "    Temp dir: $ROON_DIR"
 
 # Install EA first
 start_container "$CONTAINER" "$ROON_DIR" -e ROON_INSTALL_BRANCH=earlyaccess
-wait_for_install "$ROON_DIR"
+wait_for_install
 docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 docker rm -f "$CONTAINER" 2>/dev/null || true
 
@@ -473,7 +472,7 @@ PROD_URL="https://download.roonlabs.net/builds/production/RoonServer_linuxx64.ta
 start_container "$CONTAINER" "$ROON_DIR" \
     -e ROON_INSTALL_BRANCH=earlyaccess \
     -e ROON_DOWNLOAD_URL="$PROD_URL"
-wait_for_install "$ROON_DIR"
+wait_for_install
 wait_for_log "$CONTAINER" "^Branch: production"
 docker logs "$CONTAINER" > "$ROON_DIR/url-override-fresh.log" 2>&1 || true
 
