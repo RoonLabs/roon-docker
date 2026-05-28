@@ -40,6 +40,19 @@ for bin in bash curl bzip2 tar ffmpeg; do
         docker run --rm --entrypoint which "$IMAGE" "$bin"
 done
 
+# ps (procps) is a runtime contract: RoonServer's bundled self-update
+# launcher runs `ps -Awwo pid,args | grep '[R]AATServer' | awk ...` to
+# kill stale RAATServer processes. A missing procps silently breaks
+# updates (RRD-1551), so assert both the binary and that the pipeline runs.
+check "ps is available (procps — RoonServer self-update)" \
+    docker run --rm --entrypoint which "$IMAGE" ps
+
+# Exercise the exact flags the launcher uses. Checking ps's own exit code
+# (not the pipeline's) is deliberate: a missing/broken ps must fail here,
+# whereas the full pipeline's exit is awk's, which is 0 even when ps errors.
+check "ps self-update invocation runs (ps -Awwo pid,args)" \
+    docker run --rm --entrypoint ps "$IMAGE" -Awwo pid,args
+
 # FFmpeg is a static binary from johnvansickle.com — verify it actually
 # executes on this image's glibc/kernel ABI, not just that the file exists.
 check "ffmpeg runs (static binary ABI-compatible)" \
