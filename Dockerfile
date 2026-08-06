@@ -52,7 +52,7 @@ VOLUME /Roon /RoonBackups /Music
 
 # Healthcheck uses /proc directly instead of pgrep to avoid procps dependency
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
-    CMD grep -ql '[R]oonServer.dll' /proc/[0-9]*/cmdline 2>/dev/null || exit 1
+    CMD grep -Eql '[R]oonServer.(dll|exe)' /proc/[0-9]*/cmdline 2>/dev/null || exit 1
 
 # entrypoint.sh downloads RoonServer on first run (to /Roon/app), then
 # exec's into start.sh — the stock bash launcher that handles
