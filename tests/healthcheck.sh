@@ -94,6 +94,12 @@ probe_case() {
     container="roon-hc-$(printf '%s' "$desc" | tr -cd '[:alnum:]' | cut -c1-24)"
     CLEANUP_CONTAINERS+=("$container")
 
+    # The name is derived from the description, so a run killed mid-flight (CI
+    # timeout, Ctrl-C before the EXIT trap, SIGKILL) leaves it behind and the
+    # next `docker run` dies on a name conflict — under `set -e` that aborts
+    # the suite before a single case executes. Clear it first.
+    docker rm -fv "$container" >/dev/null 2>&1 || true
+
     # Setup goes in via the environment, never argv: passed with `-c` it would
     # put literal "RoonServer.exe" into PID 1's cmdline, and the negative cases
     # would match the cmdline probe and pass for the wrong reason.
