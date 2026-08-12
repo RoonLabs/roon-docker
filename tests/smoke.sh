@@ -306,6 +306,106 @@ check "bad download URL: no extraction attempted" \
 check "mount.cifs binary exists" \
     docker run --rm --entrypoint which "$IMAGE" mount.cifs
 
+# ─── fchmodat compatibility shim (RRD-2830) ─────────────────────
+#
+# The shim ships in every image but is only loaded on kernels that fail the
+# entrypoint's probe (see fchmodat-compat.c). Assert it is present and that it
+# is genuinely dormant: no PATH override baked into the image, and no build
+# toolchain leaked out of the builder stage.
+
+check "fchmodat shim library present" \
+    docker run --rm --entrypoint test "$IMAGE" -f /usr/local/lib/roon/fchmodat-compat.so
+
+# Empty stderr and exit 0: ld.so warns-and-continues on a bad preload
+# (exit 0 alone misses that); a dying tar is the other way around.
+# Export of fchmodat is checked at build (nm), not by grepping the .so.
+check "fchmodat shim loads as an LD_PRELOAD" \
+    docker run --rm --entrypoint sh "$IMAGE" -c \
+        'err=$(LD_PRELOAD=/usr/local/lib/roon/fchmodat-compat.so tar --version 2>&1 >/dev/null) && [ -z "$err" ]'
+
+# The emulation is unreachable on a healthy kernel. A stub at RTLD_NEXT that
+# returns EFAULT for AT_SYMLINK_NOFOLLOW stands in for the broken syscall;
+# listing the compat shim first is what makes dlsym(RTLD_NEXT) find the stub.
+# Stub-alone must fail with Bad address or the rest of the check is vacuous.
+check "fchmodat shim emulates EFAULT fchmodat (dir + symlink extract)" \
+    docker run --rm --entrypoint sh "$IMAGE" -c '
+        set -e
+        tmp=$(mktemp -d)
+        mkdir -p "$tmp/src" "$tmp/out"
+        : > "$tmp/src/file"
+        ln -s file "$tmp/src/link"
+        tar cf "$tmp/archive.tar" -C "$tmp" src
+
+        if out=$(LD_PRELOAD=/usr/local/share/roon/testdata/efault-fchmodat.so tar xf "$tmp/archive.tar" -C "$tmp/out" 2>&1); then
+            echo "EFAULT stub did not break extract; test would be vacuous" >&2
+            exit 1
+        fi
+        case "$out" in
+            *"Bad address"*) ;;
+            *) echo "EFAULT stub failed without Bad address: $out" >&2; exit 1 ;;
+        esac
+
+        rm -rf "$tmp/out"
+        mkdir -p "$tmp/out"
+        err=$(LD_PRELOAD=/usr/local/lib/roon/fchmodat-compat.so:/usr/local/share/roon/testdata/efault-fchmodat.so \
+            tar xf "$tmp/archive.tar" -C "$tmp/out" 2>&1) || {
+            echo "shim+stub extract failed: $err" >&2
+            exit 1
+        }
+        if [ -n "$err" ]; then
+            echo "shim+stub extract wrote: $err" >&2
+            exit 1
+        fi
+        test -f "$tmp/out/src/file"
+        test -L "$tmp/out/src/link"
+    '
+
+check "no tar override baked into the image (shim is opt-in at runtime)" \
+    docker run --rm --entrypoint sh "$IMAGE" -c '! test -e /usr/local/bin/tar'
+
+check "stock tar is what resolves before the entrypoint runs" \
+    docker run --rm --entrypoint sh "$IMAGE" -c '[ "$(command -v tar)" = /usr/bin/tar ]'
+
+check "build toolchain did not leak into the runtime image" \
+    docker run --rm --entrypoint sh "$IMAGE" -c '! command -v gcc >/dev/null'
+
+# Restart must not treat an arbitrary /usr/local/bin/tar as this shim, and
+# must still recognise our wrapper. ROON_DOWNLOAD_URL fails fast after the
+# install function so we can read the log without a real download.
+FOREIGN_TAR_TMP=$(mktemp -d)
+FOREIGN_TAR_OUTPUT=$(docker run --rm \
+    -e ROON_DOWNLOAD_URL=http://localhost:1 \
+    -v "$FOREIGN_TAR_TMP:/Roon" \
+    --entrypoint sh "$IMAGE" -c '
+        mkdir -p /usr/local/bin
+        printf "%s\n" "#!/bin/sh" "exec /usr/bin/tar \"\$@\"" > /usr/local/bin/tar
+        chmod +x /usr/local/bin/tar
+        exec /entrypoint.sh
+    ' 2>&1) || true
+rm -rf "$FOREIGN_TAR_TMP"
+check "foreign /usr/local/bin/tar is not reported as the fchmodat shim" \
+    sh -c '! echo "$1" | grep -q "already active"' _ "$FOREIGN_TAR_OUTPUT"
+check "foreign /usr/local/bin/tar is left alone" \
+    sh -c 'echo "$1" | grep -q "already exists and is not this wrapper"' _ "$FOREIGN_TAR_OUTPUT"
+
+OURS_TAR_TMP=$(mktemp -d)
+OURS_TAR_OUTPUT=$(docker run --rm \
+    -e ROON_DOWNLOAD_URL=http://localhost:1 \
+    -v "$OURS_TAR_TMP:/Roon" \
+    --entrypoint sh "$IMAGE" -c '
+        mkdir -p /usr/local/bin
+        printf "%s\n" \
+            "#!/bin/sh" \
+            "# Installed by entrypoint.sh — see fchmodat-compat.c." \
+            "LD_PRELOAD=\"/usr/local/lib/roon/fchmodat-compat.so\${LD_PRELOAD:+:\$LD_PRELOAD}\" exec /usr/bin/tar \"\$@\"" \
+            > /usr/local/bin/tar
+        chmod +x /usr/local/bin/tar
+        exec /entrypoint.sh
+    ' 2>&1) || true
+rm -rf "$OURS_TAR_TMP"
+check "our tar wrapper is reported already active on restart" \
+    sh -c 'echo "$1" | grep -q "already active for tar"' _ "$OURS_TAR_OUTPUT"
+
 echo ""
 echo "=== $PASS passed, $FAIL failed ==="
 [ "$FAIL" -eq 0 ]

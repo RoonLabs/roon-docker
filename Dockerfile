@@ -1,5 +1,18 @@
 # syntax=docker/dockerfile:1
 
+# Compiles the fchmodat compatibility shim (see fchmodat-compat.c). Separate
+# stage so the toolchain does not ship in the runtime image.
+FROM --platform=linux/amd64 debian:trixie-slim AS shim-builder
+RUN apt-get update \
+ && apt-get -y install --no-install-recommends gcc libc6-dev \
+ && rm -rf /var/lib/apt/lists/*
+COPY fchmodat-compat.c tests/efault-fchmodat.c /build/
+RUN gcc -shared -fPIC -O2 -Wall -Wextra -Werror \
+        -o /build/fchmodat-compat.so /build/fchmodat-compat.c -ldl \
+ && nm -D --defined-only /build/fchmodat-compat.so | grep -qw fchmodat \
+ && gcc -shared -fPIC -O2 -Wall -Wextra -Werror \
+        -o /build/efault-fchmodat.so /build/efault-fchmodat.c -ldl
+
 FROM --platform=linux/amd64 debian:trixie-slim
 
 ARG VERSION=dev
@@ -42,6 +55,11 @@ RUN curl -L -o /tmp/ffmpeg.tar.xz https://johnvansickle.com/ffmpeg/releases/ffmp
  && rm -rf /tmp/ffmpeg*
 
 RUN echo "${VERSION}" > /etc/roon-image-version
+
+# Dormant unless entrypoint.sh proves the kernel needs it — see fchmodat-compat.c.
+COPY --from=shim-builder /build/fchmodat-compat.so /usr/local/lib/roon/fchmodat-compat.so
+# Smoke-test fixture, never loaded by the entrypoint.
+COPY --from=shim-builder /build/efault-fchmodat.so /usr/local/share/roon/testdata/efault-fchmodat.so
 
 COPY entrypoint.sh /entrypoint.sh
 

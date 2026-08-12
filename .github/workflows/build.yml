@@ -8,12 +8,14 @@ on:
     paths:
       - 'Dockerfile'
       - 'entrypoint.sh'
+      - 'fchmodat-compat.c'
       - 'tests/**'
       - '.github/workflows/build.yml'
   pull_request:
     paths:
       - 'Dockerfile'
       - 'entrypoint.sh'
+      - 'fchmodat-compat.c'
       - 'tests/**'
       - '.github/workflows/build.yml'
 
