@@ -227,10 +227,11 @@ check "logs contain roon version" \
 # Record production version for later comparison
 PROD_VERSION=$(sed -n '2p' "$ROON_DIR/app/RoonServer/VERSION" 2>/dev/null || echo "")
 
-# HEALTHCHECK happy path — with RoonServer.dll or RoonServer.exe running, the grep-based
-# healthcheck in Dockerfile should flip to "healthy" once start_period
-# elapses (120s) plus one interval (30s). Budget 240s total.
-check "HEALTHCHECK reports 'healthy' when RoonServer.dll or RoonServer.exe is running" \
+# HEALTHCHECK happy path — against a real install the probe should flip to
+# "healthy" once start_period elapses (120s) plus one interval (30s). Budget
+# 240s total. Covers the Docker wiring; per-package-layout probe behaviour is
+# pinned in healthcheck.sh.
+check "HEALTHCHECK reports 'healthy' against a real install" \
     wait_for_health "$CONTAINER" healthy 240
 
 echo "    Testing clean shutdown..."
@@ -510,14 +511,15 @@ docker stop -t 10 "$CONTAINER" 2>/dev/null || true
 
 # ─── HEALTHCHECK unhealthy path ──────────────────────────────────
 #
-# Verify the HEALTHCHECK defined in Dockerfile actually flips to
-# "unhealthy" when RoonServer.dll or RoonServer.exe is not running. Without this test,
-# a broken grep pattern (e.g., someone silently changing the filename)
-# would leave containers reporting "healthy" even after Roon crashed.
+# Verify the HEALTHCHECK defined in Dockerfile actually flips a container
+# to "unhealthy" at all.
 #
-# Start with `--entrypoint sleep` so RoonServer.dll RoonServer.exe never runs but the
+# Start with `--entrypoint sleep` so RoonServer never runs but the
 # HEALTHCHECK directive still applies. After start_period (120s) +
 # 3 × interval (30s each) = 210s, status should be "unhealthy".
+#
+# Weak as a test of the probe itself — nothing here references the install
+# path — so "supervisor alive, head gone" lives in healthcheck.sh instead.
 
 echo ""
 echo "=== Runtime tests (HEALTHCHECK unhealthy path): $IMAGE ==="
@@ -530,7 +532,7 @@ docker run -d --name "$CONTAINER" \
     "$IMAGE" infinity >/dev/null
 
 # Give it up to 4 minutes: start_period 120s + 3 × 30s retries + margin.
-check "HEALTHCHECK reports 'unhealthy' when RoonServer.dll or RoonServer.exe is absent" \
+check "HEALTHCHECK reports 'unhealthy' when nothing is running" \
     wait_for_health "$CONTAINER" unhealthy 240
 
 docker stop -t 5 "$CONTAINER" 2>/dev/null || true

@@ -62,6 +62,9 @@ jobs:
       - name: Smoke tests
         run: ./tests/smoke.sh roonserver:test
 
+      - name: Healthcheck probe tests
+        run: ./tests/healthcheck.sh roonserver:test
+
       - name: Runtime tests
         run: ./tests/runtime.sh roonserver:test
 
