@@ -20,6 +20,114 @@ fi
 # Ensure directory structure exists
 mkdir -p /Roon/{app,database}
 
+# --- Broken fchmodat2 workaround (RRD-2830) ---------------------------------
+#
+# glibc 2.39+ uses syscall 452 (fchmodat2) for fchmodat with AT_SYMLINK_NOFOLLOW
+# — directories, files, and symlinks. Some vendor kernels (QNAP 5.10 is the
+# known case) put a private syscall on that number; it returns EFAULT, glibc
+# will not fall back (it only does on ENOSYS), and tar treats EFAULT as fatal.
+#
+# Detected by extracting a tiny archive with the real tar and looking for
+# "Bad address". No syscall numbers or vendor matching. The wrapper lives in
+# the container's writable layer, so a restart keeps it; it is a no-op once
+# 452 is really fchmodat2. Recreating the container re-probes.
+#
+# Preload is scoped to tar via PATH so RoonServer never loads it.
+# RoonServer/start.sh invokes `tar` unqualified, so self-update is covered too.
+install_fchmodat_shim_if_needed() {
+    local shim_lib=/usr/local/lib/roon/fchmodat-compat.so
+    local shim_bin=/usr/local/bin/tar
+    local probe out
+    test -f "$shim_lib" || return 0
+
+    # Restart: only our wrapper plus the .so is "already active". Any other
+    # executable at this path is left alone. A leftover from a failed verify
+    # is removed so the next start can retry instead of reporting success.
+    if [ -x "$shim_bin" ] && grep -qF "$shim_lib" "$shim_bin" 2>/dev/null && [ -f "$shim_lib" ]; then
+        echo "fchmodat2 compatibility shim already active for tar (see RRD-2830)."
+        return 0
+    fi
+    if [ -e "$shim_bin" ]; then
+        if grep -qF "$shim_lib" "$shim_bin" 2>/dev/null; then
+            rm -f "$shim_bin" 2>/dev/null || true
+            hash -r
+        else
+            echo "fchmodat2 shim not installed: $shim_bin already exists and is not this wrapper."
+            return 0
+        fi
+    fi
+
+    # Every filesystem step below is best-effort. This is a workaround for
+    # someone else's kernel bug and must never be the reason a container fails
+    # to start, so anything unexpected — full /tmp, read-only rootfs, --user
+    # without write access to /usr/local — degrades to "no shim" instead of
+    # tripping set -e and killing the entrypoint.
+    #
+    # Probed in /tmp, not /Roon: the fault is in the syscall, not the
+    # filesystem (it reproduces identically on overlayfs and on a bind mount),
+    # so there is no reason to leave probe debris in the user's data directory.
+    probe="$(mktemp -d 2>/dev/null)" || return 0
+    if ! mkdir -p "$probe/src" "$probe/out" 2>/dev/null \
+       || ! : > "$probe/src/file" 2>/dev/null \
+       || ! ln -s file "$probe/src/link" 2>/dev/null \
+       || ! /usr/bin/tar cf "$probe/archive.tar" -C "$probe" src 2>/dev/null; then
+        rm -rf "$probe" 2>/dev/null || true
+        return 0
+    fi
+
+    # Stock tar, not PATH: a leftover or operator /usr/local/bin/tar must
+    # not decide whether the kernel is broken.
+    out="$(/usr/bin/tar xf "$probe/archive.tar" -C "$probe/out" 2>&1)" || true
+
+    # Only an extract that reports "Bad address" (EFAULT). Other failures
+    # must surface as themselves rather than being papered over by a preload.
+    case "$out" in
+        *"Bad address"*) ;;
+        *) rm -rf "$probe" 2>/dev/null || true; return 0 ;;
+    esac
+
+    echo "Detected a kernel where fchmodat2 (syscall 452) returns EFAULT."
+    echo "  That breaks tar when restoring modes (dirs, files, symlinks) and is a"
+    echo "  known QNAP kernel issue. Enabling a compatibility shim for tar only."
+
+    # LD_PRELOAD is prepended rather than assigned so an inherited preload set
+    # by the operator survives every tar invocation, self-update included.
+    if ! mkdir -p "$(dirname "$shim_bin")" 2>/dev/null \
+       || ! printf '%s\n' \
+              '#!/bin/sh' \
+              '# Installed by entrypoint.sh — see fchmodat-compat.c.' \
+              "LD_PRELOAD=\"$shim_lib\${LD_PRELOAD:+:\$LD_PRELOAD}\" exec /usr/bin/tar \"\$@\"" \
+              > "$shim_bin" 2>/dev/null \
+       || ! chmod +x "$shim_bin" 2>/dev/null; then
+        echo "  Could not install it — /usr/local is not writable here."
+        echo "  Continuing without; tar will still fail when restoring modes."
+        rm -rf "$probe" 2>/dev/null || true
+        return 0
+    fi
+
+    # Unqualified tar must resolve through PATH so the wrapper we just wrote
+    # is what the verify extract (and later install) use.
+    hash -r
+
+    # Prove it took, rather than announcing it did. ld.so treats an unloadable
+    # LD_PRELOAD as a warning and carries on, so a mismatched or missing .so
+    # would otherwise leave a log claiming the workaround is engaged while
+    # extraction still dies with "Bad address". Re-running the same probe now
+    # exercises PATH resolution, the preload, and the shim together.
+    rm -rf "$probe/out" 2>/dev/null || true
+    if mkdir -p "$probe/out" 2>/dev/null \
+       && out="$(tar xf "$probe/archive.tar" -C "$probe/out" 2>&1)" && [ -z "$out" ]; then
+        echo "  Shim verified: probe extract now succeeds."
+    else
+        echo "  WARNING: extraction still fails (${out:-unknown error}); removing the wrapper so the next start can retry."
+        rm -f "$shim_bin" 2>/dev/null || true
+        hash -r
+    fi
+    rm -rf "$probe" 2>/dev/null || true
+}
+
+install_fchmodat_shim_if_needed
+
 # Read the installed branch from the VERSION file (last line).
 # Strip all whitespace: a corrupt/empty VERSION file (e.g., a failed prior
 # extraction) would otherwise yield a blank branch that falls through to

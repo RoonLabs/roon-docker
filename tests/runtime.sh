@@ -213,6 +213,19 @@ check "Server/RoonServer launcher exists" \
 check "dotnet runtime ships with the Server head" \
     test -f "$ROON_DIR/app/RoonServer/Server/libcoreclr.so"
 
+# fchmodat shim stayed dormant (RRD-2830). CI runs on a healthy kernel, so the
+# entrypoint's probe must not fire: no PATH override, no preload, and the
+# extraction above must have succeeded on stock tar. A probe that misfires
+# would silently put an LD_PRELOAD on tar for every user on every platform,
+# which is exactly the blast radius the detection exists to avoid.
+# Negated inside the container, not around `docker exec`: `! docker exec …`
+# turns any exec failure — container already exited, daemon hiccup — into a
+# PASS that verified nothing.
+check "fchmodat shim NOT installed on an unaffected kernel" \
+    docker exec "$CONTAINER" sh -c '! test -e /usr/local/bin/tar'
+
+check "tar still resolves to stock /usr/bin/tar" \
+    docker exec "$CONTAINER" sh -c '[ "$(command -v tar)" = /usr/bin/tar ]'
 
 wait_for_log "$CONTAINER" "^Branch: production"
 docker logs "$CONTAINER" > "$ROON_DIR/container.log" 2>&1 || true
