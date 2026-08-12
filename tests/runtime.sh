@@ -205,8 +205,13 @@ check "start.sh exists" \
 check "Server/RoonServer launcher exists" \
     test -f "$ROON_DIR/app/RoonServer/Server/RoonServer"
 
-check "RoonDotnet runtime exists" \
-    test -d "$ROON_DIR/app/RoonServer/RoonDotnet"
+# The .NET runtime used to sit in a shared RoonDotnet/ directory. 2.71 b1683
+# made the head self-contained, so the runtime now ships beside it under
+# Server/ and RoonDotnet/ is gone — this asserted a path that no longer exists
+# and had been failing since the repackaging. Pin the runtime where it actually
+# lives, so a future move fails here loudly rather than silently passing.
+check "dotnet runtime ships with the Server head" \
+    test -f "$ROON_DIR/app/RoonServer/Server/libcoreclr.so"
 
 
 wait_for_log "$CONTAINER" "^Branch: production"
