@@ -50,9 +50,19 @@ EXPOSE 9003/udp 9100-9200/tcp 9200-9250/tcp 9330-9339/tcp 55000/tcp
 
 VOLUME /Roon /RoonBackups /Music
 
-# Healthcheck uses /proc directly instead of pgrep to avoid procps dependency
+# Healthcheck uses /proc directly instead of pgrep to avoid procps dependency.
+#
+# Two probes, because the head's name depends on the package. Current builds
+# exec it via Server/.roonhost/RoonServer, so it is identifiable only by comm
+# ("RoonServer", no extension); legacy shared-runtime builds exec dotnet with
+# RoonServer.dll as an argument, where comm is just "dotnet". The comm match is
+# anchored (-x) because every install path contains a "RoonServer" directory —
+# unanchored, start.sh alone satisfies it and the container can never report
+# unhealthy. tests/healthcheck.sh pins both against this directive.
 HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=3 \
-    CMD grep -Eql '[R]oonServer.(dll|exe)' /proc/[0-9]*/cmdline 2>/dev/null || exit 1
+    CMD grep -qlxE 'RoonServer(\.exe|\.dll)?' /proc/[0-9]*/comm 2>/dev/null \
+     || grep -qlE '[R]oonServer\.(dll|exe)' /proc/[0-9]*/cmdline 2>/dev/null \
+     || exit 1
 
 # entrypoint.sh downloads RoonServer on first run (to /Roon/app), then
 # exec's into start.sh — the stock bash launcher that handles
